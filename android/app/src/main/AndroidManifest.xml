@@ -8,6 +8,8 @@
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <!-- Permissão para receber broadcast do boot para widgets -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <application
     android:label="Quicky"
     tools:replace="android:label"
@@ -15,9 +17,16 @@
     android:requestLegacyExternalStorage="true"
   >
     <!-- Activities do Braintree -->
+    <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
     <activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity" android:exported="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
     <activity android:name="com.braintreepayments.api.PayPalActivity" android:exported="true"/>
     <activity android:name="com.braintreepayments.api.VenmoActivity" android:exported="true"/>
+    <activity android:name="com.braintreepayments.api.DropInActivity" android:launchMode="singleTask" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+      </activity>
+  <activity android:name="com.braintreepayments.api.ThreeDSecureActivity"
+            android:theme="@style/Theme.AppCompat.Light" 
+            android:exported="true">
+  </activity>
     <!-- Main Activity Flutter -->
     <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
       <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>

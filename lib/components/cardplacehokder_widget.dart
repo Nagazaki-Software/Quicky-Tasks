@@ -694,7 +694,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                   logFirebaseEvent('CARDPLACEHOKDER_COMP_BUY_BTN_ON_TAP');
                   logFirebaseEvent('Button_custom_action');
                   _model.rapydPayment = await actions.generateAuthorizeNetNonce(
-                    '6fMmd2xP7L',
+                    'sandbox_ck9vkcgg_brg8dhjg5tqpw496\t',
                     _model.textController1.text,
                     functions.retirepartesdadata(
                         _model.textController2.text, 'month')!,

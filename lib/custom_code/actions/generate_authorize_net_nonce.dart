@@ -25,15 +25,19 @@ Future<String> generateAuthorizeNetNonce(
   String billingDescription,
 ) async {
   try {
+    // Validação do número do cartão (algoritmo de Luhn, por exemplo)
+    if (!isValidCardNumber(cardNumber)) {
+      throw Exception('Número de cartão inválido.');
+    }
+
     final creditCardRequest = BraintreeCreditCardRequest(
       cardNumber: cardNumber,
       expirationMonth: expirationMonth,
       expirationYear: expirationYear,
       cvv: cardCvv,
-      amount: amount.toString(), // **Obrigatório**
+      amount: amount.toString(),
     );
 
-    // Use método estático tokenizeCreditCard (não instancia Braintree)
     final result = await Braintree.tokenizeCreditCard(
       tokenizationKey,
       creditCardRequest,
@@ -44,7 +48,6 @@ Future<String> generateAuthorizeNetNonce(
     }
 
     final nonce = result.nonce!;
-
     final body = jsonEncode({
       'nonce': nonce,
       'amount': amount.toString(),
@@ -69,4 +72,20 @@ Future<String> generateAuthorizeNetNonce(
   } catch (e) {
     throw Exception('Erro ao processar pagamento: $e');
   }
+}
+
+bool isValidCardNumber(String cardNumber) {
+  // Implementação simples do algoritmo de Luhn
+  int sum = 0;
+  bool shouldDouble = false;
+  for (int i = cardNumber.length - 1; i >= 0; i--) {
+    int digit = int.parse(cardNumber[i]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return sum % 10 == 0;
 }
