@@ -1,0 +1,69 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" package="com.nagazakisoftware.quick">
+  
+  <!-- Permissões -->
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+  <uses-permission android:name="android.permission.CAMERA"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/> <!-- Permissão para reiniciar widget após reboot -->
+
+  <application
+    android:label="Quicky"
+    tools:replace="android:label"
+    android:icon="@mipmap/ic_launcher"
+    android:requestLegacyExternalStorage="true">
+    
+    <!-- Meta-data para home_widget -->
+    <meta-data android:name="home_widget" android:value="true"/>
+    
+    <!-- Activities do Braintree -->
+    <activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity" android:exported="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+    <activity android:name="com.braintreepayments.api.PayPalActivity" android:exported="true"/>
+    <activity android:name="com.braintreepayments.api.VenmoActivity" android:exported="true"/>
+    
+    <!-- Main Activity Flutter -->
+    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+      <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+      <meta-data android:name="io.flutter.embedding.android.SplashScreenDrawable" android:resource="@drawable/launch_background"/>
+      
+      <!-- Launcher -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+
+      <!-- Deep linking -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="quicky" android:host="quicky.com"/>
+      </intent-filter>
+      
+      <!-- Deep linking para Braintree PayPal -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="com.nagazakisoftware.quick.payments"/>
+      </intent-filter>
+    </activity>
+    
+    <!-- Receiver para Home Widget -->
+    <receiver android:name="dev.fluttercommunity.plus.home_widget.HomeWidgetProvider" android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/>
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/home_widget_provider"/>
+    </receiver>
+    
+    <!-- Flutter metadata -->
+    <meta-data android:name="flutterEmbedding" android:value="2"/>
+  </application>
+</manifest>

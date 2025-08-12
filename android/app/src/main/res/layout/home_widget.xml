@@ -1,0 +1,97 @@
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"  <!-- Define a orientação horizontal -->
+    android:background="#A58D5A"  <!-- Cor de fundo com tom similar ao da imagem -->
+    android:padding="16dp"  <!-- Padding interno -->
+    android:layout_width="match_parent"  <!-- Largura ocupa toda a tela -->
+    android:layout_height="wrap_content"  <!-- Altura ajustada ao conteúdo -->
+    android:gravity="center_vertical"  <!-- Alinha verticalmente os itens no centro -->
+    android:clipToOutline="true"  <!-- Cortar o conteúdo com base nos limites -->
+    android:layout_margin="8dp"  <!-- Margem externa -->
+    android:background="@drawable/rounded_corners">  <!-- Usando um drawable com cantos arredondados -->
+
+    <!-- Imagem de Avatar -->
+    <ImageView
+        android:id="@+id/widget_image"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_avatar" />  <!-- Imagem do avatar -->
+
+    <!-- Informações em layout vertical -->
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_marginStart="12dp"  <!-- Espaço entre o avatar e os textos -->
+        android:layout_width="0dp"
+        android:layout_weight="1"  <!-- O peso permite que ocupe o restante do espaço -->
+        android:layout_height="wrap_content">
+
+        <!-- Nome do usuário -->
+        <TextView
+            android:id="@+id/display_name"
+            android:textStyle="bold|italic"  <!-- Estilo de texto em negrito e itálico -->
+            android:textSize="18sp"
+            android:text="display_name"
+            android:textColor="#000000" />  <!-- Cor do texto -->
+
+        <!-- Informações de saldo, próxima tarefa e classificação -->
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:weightSum="3"  <!-- Define que a soma dos pesos será 3 -->
+
+            android:layout_marginTop="8dp">
+
+            <!-- Seção de saldo -->
+            <LinearLayout
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content">
+                <TextView
+                    android:text="Balance"  <!-- Texto informando o saldo -->
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/balance"
+                    android:text="$20"  <!-- Exibe o valor do saldo -->
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Seção de próxima tarefa -->
+            <LinearLayout
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content">
+                <TextView
+                    android:text="Next task"  <!-- Texto para próxima tarefa -->
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/next_task"
+                    android:text="04/11"  <!-- Data da próxima tarefa -->
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Seção de classificação -->
+            <LinearLayout
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content">
+                <TextView
+                    android:text="Rating"  <!-- Texto para classificação -->
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/rating"
+                    android:text="⭐️⭐️ 4.5"  <!-- Exibe a classificação (4.5 estrelas) -->
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>
