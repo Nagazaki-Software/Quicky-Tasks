@@ -68,4 +68,5 @@ target 'ImageNotification' do
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
   pod 'GoogleUtilities'
+  pod 'AcceptSDK'
 end
