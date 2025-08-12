@@ -1,6 +1,6 @@
 $FirebaseAnalyticsWithoutAdIdSupport = true
 # Uncomment this line to define a global platform for your project
-platform :ios, '12.0.0'
+platform :ios, '14.0.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -35,6 +35,13 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
+
+  # Add Braintree pods
+  pod 'Braintree', '~> 5.0.0'
+  pod 'Braintree/UI', '~> 5.0.0'
+  pod 'Braintree/Card', '~> 5.0.0'
+  pod 'Braintree/PayPal', '~> 5.0.0'
+  pod 'Braintree/GooglePay', '~> 5.0.0'
 end
 
 post_install do |installer|
