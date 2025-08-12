@@ -48,7 +48,7 @@
         <key>CFBundleTypeRole</key>
         <string>Editor</string>
         <key>CFBundleURLName</key>
-        <string>com.seuapp.id.payments</string>
+        <string>com.nagazakisoftware.quick.payments</string>
         <key>CFBundleURLSchemes</key>
         <array>
           <string>com.nagazakisoftware.quick.payments</string>

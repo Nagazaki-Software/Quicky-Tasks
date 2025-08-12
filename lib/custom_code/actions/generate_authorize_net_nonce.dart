@@ -9,47 +9,49 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
-import 'package:authorize_net_sdk_plugin/authorize_net_sdk_plugin.dart';
+import 'package:braintree_flutter_plus/braintree_flutter_plus.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 Future<String> generateAuthorizeNetNonce(
-  String apiLoginId,
-  String clientKey,
+  String tokenizationKey,
   String cardNumber,
   String expirationMonth,
   String expirationYear,
   String cardCvv,
   double amount,
-  String cardHolderName,
-  String
-      backendUrl, // Ex: https://us-central1-seuprojeto.cloudfunctions.net/processPayment
+  String backendUrl,
+  String displayName,
+  String billingDescription,
 ) async {
-  final authorizeNet = AuthorizeNetSdkPlugin();
-
   try {
-    // Gera o nonce/token do cartão via plugin nativo
-    final nonce = await authorizeNet.generateNonce(
-      apiLoginId: apiLoginId,
-      clientKey: clientKey,
+    final creditCardRequest = BraintreeCreditCardRequest(
       cardNumber: cardNumber,
       expirationMonth: expirationMonth,
       expirationYear: expirationYear,
-      cardCode: cardCvv,
+      cvv: cardCvv,
+      amount: amount.toString(), // **Obrigatório**
     );
 
-    if (nonce == null) {
-      throw Exception('Nonce retornou nulo');
+    // Use método estático tokenizeCreditCard (não instancia Braintree)
+    final result = await Braintree.tokenizeCreditCard(
+      tokenizationKey,
+      creditCardRequest,
+    );
+
+    if (result == null || result.nonce == null || result.nonce!.isEmpty) {
+      throw Exception('Falha ao gerar nonce do cartão');
     }
 
-    // Monta o corpo JSON para enviar ao backend
+    final nonce = result.nonce!;
+
     final body = jsonEncode({
       'nonce': nonce,
-      'amount': amount,
-      'cardHolderName': cardHolderName,
+      'amount': amount.toString(),
+      'displayName': displayName,
+      'billingDescription': billingDescription,
     });
 
-    // Chama seu backend para processar o pagamento
     final response = await http.post(
       Uri.parse(backendUrl),
       headers: {'Content-Type': 'application/json'},
@@ -58,7 +60,6 @@ Future<String> generateAuthorizeNetNonce(
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      // Retorna a mensagem do backend (ex: transactionId, status, etc)
       return data['message'] ?? 'Pagamento realizado com sucesso!';
     } else {
       final errorData = jsonDecode(response.body);

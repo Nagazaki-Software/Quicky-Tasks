@@ -16,4 +16,3 @@ export 'flutter_task_swiper.dart' show FlutterTaskSwiper;
 export 'playback_waveform.dart' show PlaybackWaveform;
 export 'event_list.dart' show EventList;
 export 'event_live.dart' show EventLive;
-export 'authorize_net_widget.dart' show AuthorizeNetWidget;
