@@ -39,6 +39,15 @@
           android:theme="@style/Theme.AppCompat.Light" 
           android:exported="true"/>
 
+<!-- Deep Linking para retorno Braintree PayPal -->
+<intent-filter>
+    <action android:name="android.intent.action.VIEW"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <category android:name="android.intent.category.BROWSABLE"/>
+    <data android:scheme="com.nagazakisoftware.quick.payments"/>
+</intent-filter>
+
+
         <!-- Main Activity Flutter -->
         <activity android:name=".MainActivity" 
                   android:exported="true" 
