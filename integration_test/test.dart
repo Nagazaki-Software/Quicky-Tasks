@@ -1,14 +1,7 @@
-import 'dart:io';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:quicky/flutter_flow/flutter_flow_drop_down.dart';
-import 'package:quicky/flutter_flow/flutter_flow_icon_button.dart';
-import 'package:quicky/flutter_flow/flutter_flow_widgets.dart';
-import 'package:quicky/flutter_flow/flutter_flow_theme.dart';
-import 'package:quicky/index.dart';
 import 'package:quicky/main.dart';
 import 'package:quicky/flutter_flow/flutter_flow_util.dart';
 
@@ -34,11 +27,15 @@ void main() async {
   testWidgets('Request Test', (WidgetTester tester) async {
     _overrideOnError();
     await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: 'forteste@teste.com', password: 'teste123');
-    await tester.pumpWidget(ChangeNotifierProvider(
-      create: (context) => FFAppState(),
-      child: const MyApp(),
-    ));
+      email: 'forteste@teste.com',
+      password: 'teste123',
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (context) => FFAppState(),
+        child: const MyApp(),
+      ),
+    );
     await GoogleFonts.pendingFonts();
 
     await tester.tap(find.byKey(const ValueKey('Container_clzu')));

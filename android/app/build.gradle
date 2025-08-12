@@ -79,7 +79,12 @@ dependencies {
     }
 
     // Dependência do Home Widget para integração de widgets
-    implementation 'dev.fluttercommunity.plus:home_widget:0.1.2'
+    implementation 'dev.fluttercommunity.plus:home_widget:0.8.0'  // Atualizado para a versão mais recente
+
+    // Dependências de Firebase
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-messaging'
+    implementation 'com.google.firebase:firebase-firestore'
 
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
@@ -88,4 +93,14 @@ dependencies {
 configurations.all {
     exclude group: "com.braintreepayments.api", module: "paypal"
     exclude group: "com.paypal.android.sdk"
+}
+
+// Certifique-se de que o repositório Maven Central está configurado corretamente
+allprojects {
+    repositories {
+        google()
+        mavenCentral()  // Adicionando Maven Central para garantir a resolução de dependências
+        jcenter()
+        maven { url 'https://jitpack.io' }  // Adiciona o repositório JitPack, se necessário
+    }
 }

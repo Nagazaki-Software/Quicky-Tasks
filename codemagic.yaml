@@ -1,0 +1,17 @@
+workflows:
+  ios:
+    name: iOS Release
+    platform: ios
+    sdk: macos-xcode13
+    artifacts:
+      - build/ios/iphoneos/*.ipa
+    scripts:
+      - name: Install Dependencies
+        script: |
+          # Navega até o diretório ios e executa o pod install
+          cd ios
+          pod install
+      - name: Build iOS Release
+        script: |
+          # Executa o build do Flutter para iOS no modo release
+          flutter build ios --release --no-codesign
