@@ -23,12 +23,12 @@ Future<String> generateAuthorizeNetNonce(
   double amount,
   String cardHolderName,
   String
-      backendUrl, // Exemplo: https://us-central1-seuprojeto.cloudfunctions.net/processPayment
+      backendUrl, // Ex: https://us-central1-seuprojeto.cloudfunctions.net/processPayment
 ) async {
   final authorizeNet = AuthorizeNetSdkPlugin();
 
   try {
-    // Gera o nonce/token do cartão
+    // Gera o nonce/token do cartão via plugin nativo
     final nonce = await authorizeNet.generateNonce(
       apiLoginId: apiLoginId,
       clientKey: clientKey,
@@ -42,14 +42,14 @@ Future<String> generateAuthorizeNetNonce(
       throw Exception('Nonce retornou nulo');
     }
 
-    // Monta o body JSON para enviar ao backend
+    // Monta o corpo JSON para enviar ao backend
     final body = jsonEncode({
-      'nonce': nonce.toString(),
+      'nonce': nonce,
       'amount': amount,
       'cardHolderName': cardHolderName,
     });
 
-    // Chama seu backend (Cloud Function) para processar o pagamento
+    // Chama seu backend para processar o pagamento
     final response = await http.post(
       Uri.parse(backendUrl),
       headers: {'Content-Type': 'application/json'},
@@ -58,7 +58,7 @@ Future<String> generateAuthorizeNetNonce(
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      // Retorna a mensagem do backend, ex: transactionId ou confirmação
+      // Retorna a mensagem do backend (ex: transactionId, status, etc)
       return data['message'] ?? 'Pagamento realizado com sucesso!';
     } else {
       final errorData = jsonDecode(response.body);
