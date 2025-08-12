@@ -22,19 +22,22 @@
         <!-- Permissões do Braintree -->
         <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
 
-        <!-- Activities do Braintree -->
-        <activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity" 
-                  android:exported="true" 
-                  android:launchMode="singleTask" 
-                  android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
-        <activity android:name="com.braintreepayments.api.PayPalActivity" android:exported="true"/>
-        <activity android:name="com.braintreepayments.api.VenmoActivity" android:exported="true"/>
-        <activity android:name="com.braintreepayments.api.DropInActivity" 
-                  android:launchMode="singleTask" 
-                  android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
-        <activity android:name="com.braintreepayments.api.ThreeDSecureActivity" 
-                  android:theme="@style/Theme.AppCompat.Light" 
-                  android:exported="true"/>
+       <!-- Permissões do Braintree -->
+<meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
+
+<!-- Activities do Braintree -->
+<activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity" 
+          android:exported="true" 
+          android:launchMode="singleTask" 
+          android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+<activity android:name="com.braintreepayments.api.PayPalActivity" android:exported="true"/>
+<activity android:name="com.braintreepayments.api.VenmoActivity" android:exported="true"/>
+<activity android:name="com.braintreepayments.api.DropInActivity" 
+          android:launchMode="singleTask" 
+          android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+<activity android:name="com.braintreepayments.api.ThreeDSecureActivity" 
+          android:theme="@style/Theme.AppCompat.Light" 
+          android:exported="true"/>
 
         <!-- Main Activity Flutter -->
         <activity android:name=".MainActivity" 
