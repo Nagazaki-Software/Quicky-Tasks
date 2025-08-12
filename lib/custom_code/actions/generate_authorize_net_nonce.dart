@@ -9,9 +9,9 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'dart:convert';
 import 'package:braintree_flutter_plus/braintree_flutter_plus.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 Future<String> generateAuthorizeNetNonce(
   String tokenizationKey,
@@ -25,7 +25,6 @@ Future<String> generateAuthorizeNetNonce(
   String billingDescription,
 ) async {
   try {
-    // Validação do número do cartão (algoritmo de Luhn, por exemplo)
     if (!isValidCardNumber(cardNumber)) {
       throw Exception('Número de cartão inválido.');
     }
@@ -42,3 +41,45 @@ Future<String> generateAuthorizeNetNonce(
       tokenizationKey,
       creditCardRequest,
     );
+
+    final nonce = result?.nonce;
+    if (nonce == null || nonce.isEmpty) {
+      throw Exception('Erro ao tokenizar o cartão.');
+    }
+
+    if (backendUrl.isNotEmpty) {
+      await http.post(
+        Uri.parse(backendUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'payment_method_nonce': nonce,
+          'amount': amount,
+          'display_name': displayName,
+          'billing_description': billingDescription,
+        }),
+      );
+    }
+
+    return nonce;
+  } catch (e) {
+    debugPrint('Erro ao gerar nonce: $e');
+    rethrow;
+  }
+}
+
+bool isValidCardNumber(String cardNumber) {
+  final sanitized = cardNumber.replaceAll(RegExp(r'\s+'), '');
+  if (sanitized.isEmpty) return false;
+  int sum = 0;
+  bool alternate = false;
+  for (int i = sanitized.length - 1; i >= 0; i--) {
+    int digit = int.parse(sanitized[i]);
+    if (alternate) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    alternate = !alternate;
+  }
+  return sum % 10 == 0;
+}
