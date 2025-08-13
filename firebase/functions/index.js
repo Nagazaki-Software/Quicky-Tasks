@@ -1,5 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { APIContracts, APIControllers } = require("authorizenet");
 admin.initializeApp();
 
 const kFcmTokensCollection = "fcm_tokens";
@@ -229,6 +230,79 @@ function getCharForIndex(charIdx) {
     return String.fromCharCode("a".charCodeAt(0) + charIdx - 36);
   }
 }
+
+exports.createAuthorizeNetTransaction = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    return { error: "Authentication required." };
+  }
+  const dataValue = data.dataValue || "";
+  const dataDescriptor = data.dataDescriptor || "";
+  const amount = data.amount || 0;
+  if (!dataValue || !dataDescriptor || !amount) {
+    return { error: "Invalid request parameters." };
+  }
+
+  const merchantAuthentication = new APIContracts.MerchantAuthenticationType();
+  merchantAuthentication.setName(process.env.AUTH_NET_API_LOGIN_ID);
+  merchantAuthentication.setTransactionKey(process.env.AUTH_NET_TRANSACTION_KEY);
+
+  const opaqueData = new APIContracts.OpaqueDataType();
+  opaqueData.setDataDescriptor(dataDescriptor);
+  opaqueData.setDataValue(dataValue);
+
+  const paymentType = new APIContracts.PaymentType();
+  paymentType.setOpaqueData(opaqueData);
+
+  const transactionRequest = new APIContracts.TransactionRequestType();
+  transactionRequest.setTransactionType(
+    APIContracts.TransactionTypeEnum.AUTHCAPTURETRANSACTION,
+  );
+  transactionRequest.setAmount(amount);
+  transactionRequest.setPayment(paymentType);
+
+  const createRequest = new APIContracts.CreateTransactionRequest();
+  createRequest.setMerchantAuthentication(merchantAuthentication);
+  createRequest.setTransactionRequest(transactionRequest);
+
+  const controller = new APIControllers.CreateTransactionController(
+    createRequest.getJSON(),
+  );
+
+  return new Promise((resolve) => {
+    controller.execute(() => {
+      const apiResponse = controller.getResponse();
+      const response = new APIContracts.CreateTransactionResponse(apiResponse);
+
+      if (
+        response &&
+        response.getMessages().getResultCode() ===
+          APIContracts.MessageTypeEnum.OK &&
+        response.getTransactionResponse().getMessages() !== null
+      ) {
+        resolve({
+          transactionId: response.getTransactionResponse().getTransId(),
+        });
+      } else {
+        let errorText = "Unknown error";
+        if (
+          response &&
+          response.getTransactionResponse() &&
+          response.getTransactionResponse().getErrors()
+        ) {
+          errorText = response
+            .getTransactionResponse()
+            .getErrors()
+            .getError()[0]
+            .getErrorText();
+        } else if (response && response.getMessages()) {
+          errorText = response.getMessages().getMessage()[0].getText();
+        }
+        resolve({ error: errorText });
+      }
+    });
+  });
+});
+
 exports.onUserDeleted = functions.auth.user().onDelete(async (user) => {
   let firestore = admin.firestore();
   let userRef = firestore.doc("users/" + user.uid);
