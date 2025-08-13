@@ -8,11 +8,16 @@ import BraintreeCore
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Registrar plugins Flutter
     GeneratedPluginRegistrant.register(with: self)
-    BTAppContextSwitcher.setReturnURLScheme("com.nagazakisoftware.quick.payments")
+    
+    // Configura o esquema da URL para o callback do Braintree PayPal
+    BTAppContextSwitcher.setReturnURLScheme("com.nagazakisoftware.quick.payments") // <--- coloque seu CFBundleURLSchemes aqui
+    
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // Método para tratar a abertura da URL de callback do PayPal/Braintree
   override func application(
     _ app: UIApplication,
     open url: URL,

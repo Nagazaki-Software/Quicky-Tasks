@@ -2,13 +2,15 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    id "com.google.gms.google-services"  // Google Services plugin (Firebase)
+    id "com.google.gms.google-services"
 }
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
 }
 
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
@@ -26,7 +28,7 @@ android {
 
     defaultConfig {
         applicationId "com.nagazakisoftware.quick"
-        minSdkVersion 23
+        minSdkVersion 23       // Braintree pede 21+, aqui tá ok
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -35,12 +37,12 @@ android {
 
     compileOptions {
         coreLibraryDesugaringEnabled true
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = JavaVersion.VERSION_1_8
     }
 
     sourceSets {
@@ -52,11 +54,33 @@ android {
         checkReleaseBuilds false
     }
 
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
     buildTypes {
         release {
-            // FlutterFlow cuida da assinatura release, aqui usa debug pra release
-            signingConfig signingConfigs.debug
+            // Use o keystore de release (não o debug)
+            signingConfig signingConfigs.release
+            minifyEnabled true                // ativa shrink; ajuste se preferir
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // se quiser, mantém debug com minify off
+            minifyEnabled false
+        }
+    }
+
+    // (Opcional) evitar colisão de licenças em libs de terceiros
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
         }
     }
 }
@@ -66,23 +90,15 @@ flutter {
 }
 
 dependencies {
-    // Desugaring para Java 8+ APIs
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
-    // Kotlin stdlib compatível (Java 11)
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10"
+    // Removido: stdlib explícita (evita conflito de versão)
+    // implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0"
 
-    // Braintree Drop-in 5.8.0 sem PayPal (evita conflito)
-    implementation("com.braintreepayments.api:drop-in:5.8.0") {
-        exclude group: "com.braintreepayments.api", module: "paypal"
-        exclude group: "com.paypal.android.sdk"
-    }
-
+    // Testes (se quiser subir versões, pode)
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
-}
 
-configurations.all {
-    exclude group: "com.braintreepayments.api", module: "paypal"
-    exclude group: "com.paypal.android.sdk"
+    // Google Pay (OPCIONAL - só se for usar GPay no Drop-in e o plugin não trouxer)
+    // implementation 'com.google.android.gms:play-services-wallet:19.4.0'
 }
