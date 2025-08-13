@@ -10,7 +10,5 @@
 -dontwarn org.bouncycastle.pqc.jcajce.provider.BouncyCastlePQCProvider
 -keep class org.xmlpull.v1.** { *; }
 
--keep class com.braintreepayments.** { *; }
--dontwarn com.braintreepayments.**
 -keep class com.google.android.gms.wallet.** { *; }
 -dontwarn com.google.android.gms.**
