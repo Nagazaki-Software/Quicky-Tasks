@@ -1,8 +1,6 @@
+source 'https://cdn.cocoapods.org/'
 # Habilita SDK do Analytics sem ID de Ads
 $FirebaseAnalyticsWithoutAdIdSupport = true
-
-# Use o CDN oficial do CocoaPods (evita repo velho)
-source 'https://cdn.cocoapods.org/'
 
 # Plataforma alvo (use "15.0" em vez de "15.0.0")
 platform :ios, '15.0'
