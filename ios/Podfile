@@ -1,8 +1,6 @@
 $FirebaseAnalyticsWithoutAdIdSupport = true
 
-# iOS mínimo — mantenha 15; se algum pod exigir mais, suba pra '16.0'
-platform :ios, '15.0'
-
+platform :ios, '15.0'     # se alguma pod exigir, suba pra '16.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -11,16 +9,32 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# Braintree e Flutter funcionam muito bem com frameworks estáticos
-use_frameworks! :linkage => :static
-# ⚠️ Evite use_modular_headers! aqui; se algum plugin reclamar, a gente liga pontualmente.
+# --- Descobre FLUTTER_ROOT e carrega o podhelper ---
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
 
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+# <<< ESSA LINHA PRECISA EXISTIR >>>
 flutter_ios_podfile_setup
+
+# Braintree/Flutter funcionam bem com frameworks estáticos
+use_frameworks! :linkage => :static
+# ⚠️ Não use 'use_modular_headers!' global aqui (só se algum pod específico pedir)
 
 target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Mantive seu Firestore via Invertase (ok)
+  # Firestore via Invertase (como você já usava)
   pod 'FirebaseFirestore',
       :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git',
       :tag => '11.13.0'
@@ -28,16 +42,15 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
+    # ajustes padrão do Flutter
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      # ✅ FORÇA o alvo mínimo em TODAS as pods (não delete isso)
+      # 🔒 força o alvo mínimo em TODAS as pods (não delete isso)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-
-      # ✅ Swift/Xcode modernos (Braintree iOS v6 usa toolchain novo)
+      # Xcode 15 toolchain
       config.build_settings['SWIFT_VERSION'] = '5.9'
-
-      # ✅ Warnings NÃO viram erro (depreciações do PayPal não vão te derrubar)
+      # Não tratar warnings como erro (Braintree/PayPal soltam depreciação)
       config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
       config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
       config.build_settings['OTHER_CFLAGS'] = '$(inherited) -Wno-deprecated-declarations'
@@ -45,7 +58,7 @@ post_install do |installer|
   end
 end
 
-# Seu target de notificação por imagem
+# Target extra que você tinha
 target 'ImageNotification' do
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
