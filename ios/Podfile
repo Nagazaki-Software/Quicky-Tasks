@@ -1,7 +1,6 @@
 source 'https://cdn.cocoapods.org/'
 $FirebaseAnalyticsWithoutAdIdSupport = true
 platform :ios, '15.0'
-
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -30,16 +29,21 @@ target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
+  # Instala todos os pods de Flutter + plugins
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # 👉 Braintree modular (NADA de 'pod "Braintree"')
-  pod 'BraintreeCore'
-  pod 'BraintreeCard'
-  pod 'BraintreeThreeDSecure'
-  pod 'BraintreeDataCollector'
-  # Se precisar: pod 'BraintreePayPal', pod 'BraintreeVenmo'
+  # ✅ Braintree via subspecs (forma correta no CocoaPods)
+  # NÃO fixe versão aqui, deixe o resolver do CDN trabalhar.
+  pod 'Braintree/Core'
+  pod 'Braintree/Card'
+  pod 'Braintree/ThreeDSecure'
+  pod 'Braintree/DataCollector'
+  # Se for usar Paypal/Venmo no app-switch:
+  # pod 'Braintree/PayPal'
+  # pod 'Braintree/Venmo'
 end
 
+# (Opcional) extensão de notificação se você usa Messaging
 target 'ImageNotification' do
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
