@@ -33,60 +33,63 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
 
+    // ✅ Java 17 para AGP 8.x
     compileOptions {
         coreLibraryDesugaringEnabled true
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
+    // ✅ Kotlin alinhado ao Java 17
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = "17"
     }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
-    lintOptions {
-        disable 'InvalidPackage'
+    // ✅ DSL nova do Lint no AGP 8.x
+    lint {
         checkReleaseBuilds false
+        abortOnError false
+        disable += ['InvalidPackage']
     }
 
     def hasKeystore = keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()
 
-signingConfigs {
-    debug {
-        // padrão do Android/Flutter
-    }
-    release {
-        if (hasKeystore) {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
+    signingConfigs {
+        debug {
+            // padrão do Flutter
+        }
+        release {
+            if (hasKeystore) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            }
         }
     }
-}
 
-buildTypes {
-    release {
-        // se não houver keystore de release, cai pro debug pra não falhar
-        signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
-        minifyEnabled true
-        shrinkResources true
-        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    buildTypes {
+        release {
+            signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
     }
-    debug {
-        signingConfig signingConfigs.debug
-        minifyEnabled false
-    }
-}
 
-
-    // (Opcional) evitar colisão de licenças em libs de terceiros
-    packagingOptions {
+    // ✅ DSL nova de packaging
+    packaging {
         resources {
             excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
         }
@@ -98,15 +101,12 @@ flutter {
 }
 
 dependencies {
+    // Desugar (ok manter mesmo com Java 17, ajuda em algumas APIs retrocompatíveis)
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
-    // Removido: stdlib explícita (evita conflito de versão)
-    // implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0"
+    // Testes (opcionais; pode atualizar depois se quiser)
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
-    // Testes (se quiser subir versões, pode)
-    androidTestImplementation 'androidx.test:runner:1.2.0'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
-
-    // Google Pay (OPCIONAL - só se for usar GPay no Drop-in e o plugin não trouxer)
-    // implementation 'com.google.android.gms:play-services-wallet:19.4.0'
+    // Nada de forçar kotlin-stdlib aqui – o plugin cuida da versão
 }
