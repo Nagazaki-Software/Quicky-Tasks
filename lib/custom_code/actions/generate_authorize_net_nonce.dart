@@ -9,17 +9,17 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
-import 'package:braintree_flutter_plus/braintree_flutter_plus.dart';
+import 'package:authorize_net_sdk_plugin/authorize_net_sdk_plugin.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-/// Gera o nonce do cartão no cliente e conclui o pagamento no seu backend
-/// (um único endpoint para GET=token e POST=checkout).
+/// Gera o nonce do cartão no cliente via Authorize.Net e conclui o pagamento no
+/// seu backend (POST único).
 ///
-/// tokenizationKey: opcional (fallback se falhar pegar clientToken)
-/// backendUrl: URL ÚNICA da sua Cloud Function (mesmo endpoint p/ GET e POST)
+/// backendUrl: URL ÚNICA da sua Cloud Function (mesmo endpoint p/ checkout)
 Future<String> generateAuthorizeNetNonce(
-  String tokenizationKey,
+  String apiLoginId,
+  String clientKey,
   String cardNumber,
   String expirationMonth,
   String expirationYear,
@@ -28,6 +28,7 @@ Future<String> generateAuthorizeNetNonce(
   String backendUrl,
   String displayName,
   String billingDescription,
+  String environment,
 ) async {
   try {
     // --- Sanitização & validação ---
@@ -45,36 +46,23 @@ Future<String> generateAuthorizeNetNonce(
       throw Exception('Valor inválido (use > 0 com até 2 casas decimais).');
     }
 
-    // --- 1) Pega client token do backend (GET no MESMO endpoint) ---
-    String authorization = await _fetchClientToken(backendUrl);
-    if (authorization.isEmpty) {
-      // fallback: tokenizationKey (menos poderoso que clientToken)
-      authorization = tokenizationKey.trim();
-    }
-    if (authorization.isEmpty) {
-      throw Exception(
-          'Falha ao obter autorização do Braintree (clientToken/tokenizationKey).');
+    // --- 1) Inicializa o plugin e verifica se está pronto ---
+    final plugin = AuthorizeNetSdkPlugin();
+    final ready = await plugin.isReady();
+    if (!ready) {
+      throw Exception('SDK não está pronto para gerar nonce.');
     }
 
-    // --- 2) Tokeniza o cartão (gera NONCE) ---
-    final creditCardRequest = BraintreeCreditCardRequest(
+    // --- 2) Gera o nonce do cartão ---
+    final nonce = (await plugin.generateNonce(
+      apiLoginId: apiLoginId,
+      clientKey: clientKey,
       cardNumber: digitsOnly,
       expirationMonth: mm,
       expirationYear: yyyy,
-      cvv: cardCvv.trim(),
-      // 👇 O plugin PLUS pede amount aqui (usado p/ 3DS)
-      amount: normalizedAmount, // String com 2 casas decimais
-      // Se o seu pacote reclamar de tipo, troque para:
-      // amount: double.parse(normalizedAmount),
-      // (algumas forks tipam como double)
-    );
-
-    final tokenized = await Braintree.tokenizeCreditCard(
-      authorization,
-      creditCardRequest,
-    );
-
-    final nonce = (tokenized?.nonce ?? '').trim();
+      cardCode: cardCvv.trim(),
+      environment: environment,
+    ))?.trim() ?? '';
     if (nonce.isEmpty) {
       throw Exception('Falha ao gerar nonce do cartão.');
     }
@@ -116,20 +104,7 @@ Future<String> generateAuthorizeNetNonce(
     throw Exception('Erro ao processar pagamento: $e');
   }
 }
-
 // -------------------- Helpers --------------------
-
-Future<String> _fetchClientToken(String backendUrl) async {
-  try {
-    final r = await http.get(Uri.parse(backendUrl));
-    if (r.statusCode == 200) {
-      final data = jsonDecode(r.body) as Map<String, dynamic>;
-      final token = (data['clientToken'] ?? '').toString().trim();
-      return token;
-    }
-  } catch (_) {}
-  return '';
-}
 
 /// Retorna string com 2 casas decimais se válido, ou null se inválido/<=0
 String? _normalizeAmount(double amount) {
