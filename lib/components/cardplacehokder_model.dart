@@ -26,7 +26,7 @@ class CardplacehokderModel extends FlutterFlowModel<CardplacehokderWidget> {
   FocusNode? textFieldFocusNode4;
   TextEditingController? textController4;
   String? Function(BuildContext, String?)? textController4Validator;
-  // Stores action output result for [Custom Action - generateAuthorizeNetNonce] action in Button widget.
+  // Stores action output result for [Custom Action - processBraintreeCard3DSNativeUI] action in Button widget.
   String? rapydPayment;
 
   @override

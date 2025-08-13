@@ -1,4 +1,4 @@
-import '/components/deposit_success_widget.dart';
+import '/auth/firebase_auth/auth_util.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -664,7 +664,10 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                         size: 20.0,
                       ),
                       Text(
-                        'Your purchase is safe with Quicky®.',
+                        valueOrDefault<String>(
+                          _model.rapydPayment,
+                          '..',
+                        ),
                         style: FlutterFlowTheme.of(context).bodyMedium.override(
                               font: GoogleFonts.poppins(
                                 fontWeight: FlutterFlowTheme.of(context)
@@ -693,36 +696,31 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                 onPressed: () async {
                   logFirebaseEvent('CARDPLACEHOKDER_COMP_BUY_BTN_ON_TAP');
                   logFirebaseEvent('Button_custom_action');
-                  _model.rapydPayment = await actions.generateAuthorizeNetNonce(
-                    '6fMmd2xP7L',
-                    '7GG66ewra8mfB2AEY3NBG74nMkNtJjhje6expSzdm5WzPavWHZrV67tY9Nz32369',
+                  _model.rapydPayment =
+                      await actions.processBraintreeCard3DSNativeUI(
+                    'https://us-central1-quick-b108e.cloudfunctions.net/createPaymentIntent',
+                    widget.value!,
+                    currentUserEmail,
                     _model.textController1.text,
                     functions.retirepartesdadata(
                         _model.textController2.text, 'month')!,
                     functions.retirepartesdadata(
                         _model.textController2.text, 'year')!,
+                    _model.textController3.text,
+                    functions.separartextoeescolherposicao(
+                        currentUserDisplayName, 0),
+                    functions.separartextoeescolherposicao(
+                        currentUserDisplayName, 1),
+                    '+348 3467-3478',
+                    'SDFSD',
                     '',
-                    widget.value!,
-                    'https://us-central1-quick-b108e.cloudfunctions.net/createPaymentIntent',
-                    _model.textController4.text,
-                    'Quicky QS Tokens',
-                    'sandbox',
+                    'Ariozona',
+                    'US',
+                    '92345',
+                    'US',
+                    'brg8dhjg5tqpw496',
+                    'ORDER-QUICKYQS',
                   );
-                  logFirebaseEvent('Button_bottom_sheet');
-                  await showModalBottomSheet(
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    enableDrag: false,
-                    context: context,
-                    builder: (context) {
-                      return Padding(
-                        padding: MediaQuery.viewInsetsOf(context),
-                        child: DepositSuccessWidget(
-                          deposityValue: widget.value!,
-                        ),
-                      );
-                    },
-                  ).then((value) => safeSetState(() {}));
 
                   safeSetState(() {});
                 },

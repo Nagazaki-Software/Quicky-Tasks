@@ -2,19 +2,17 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    id "com.google.gms.google-services"
+    id "com.google.gms.google-services" // se você usa Firebase/Play Services
 }
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
+    localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
 }
 
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
-def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
+def flutterVersionCode = (localProperties.getProperty('flutter.versionCode') ?: '1')
+def flutterVersionName = (localProperties.getProperty('flutter.versionName') ?: '1.0')
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
@@ -28,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId "com.nagazakisoftware.quick"
-        minSdkVersion 23
+        minSdkVersion 21
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -36,35 +34,31 @@ android {
         multiDexEnabled true
     }
 
-    // ✅ Java 17 para AGP 8.x
+    // ✅ Java 17 (necessário pra AGP 8.x)
     compileOptions {
         coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    // ✅ Kotlin alinhado ao Java 17
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // ✅ Kotlin alinhado
+    kotlinOptions { jvmTarget = "17" }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
-    // ✅ DSL nova do Lint no AGP 8.x
+    // ✅ DSL nova do Lint
     lint {
         checkReleaseBuilds false
         abortOnError false
         disable += ['InvalidPackage']
     }
 
+    // Assinatura: usa release se houver keystore; senão cai no debug (pra não travar)
     def hasKeystore = keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()
-
     signingConfigs {
-        debug {
-            // padrão do Flutter
-        }
+        debug { /* padrão */ }
         release {
             if (hasKeystore) {
                 keyAlias keystoreProperties['keyAlias']
@@ -88,7 +82,7 @@ android {
         }
     }
 
-    // ✅ DSL nova de packaging
+    // ✅ evita conflitos de licenças em libs de terceiros
     packaging {
         resources {
             excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
@@ -101,12 +95,16 @@ flutter {
 }
 
 dependencies {
-    // Desugar (ok manter mesmo com Java 17, ajuda em algumas APIs retrocompatíveis)
+    // Desugar (ok manter mesmo em Java 17 para retro-APIs)
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
-    // Testes (opcionais; pode atualizar depois se quiser)
+    // NÃO force a stdlib do Kotlin — o Gradle/AGP gerencia a correta.
+    // implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0"  <-- REMOVIDO
+
+    // Testes (opcional atualizar depois)
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
-    // Nada de forçar kotlin-stdlib aqui – o plugin cuida da versão
+    // (Opcional) Card.io se quiser leitura de cartão via câmera no Drop-in:
+    // implementation 'io.card:android-sdk:5.+'
 }

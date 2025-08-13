@@ -1,51 +1,48 @@
-// android/build.gradle (RAIZ)
-
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url "https://storage.googleapis.com/download.flutter.io" }
-        maven { url "https://jitpack.io" }
-        maven { url "https://maven.cardinalcommerce.com" }
-        maven {
-            url "http://maven.wdepos.com/repository/maven-public"
-            allowInsecureProtocol true
-            // credentials { ... } // se precisar
-        }
-    }
-}
 allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://storage.googleapis.com/download.flutter.io" }
-        maven { url "https://jitpack.io" }
-        maven { url "https://maven.cardinalcommerce.com" }
-        maven {
-            url "http://maven.wdepos.com/repository/maven-public"
-            allowInsecureProtocol true
+    }
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("kotlin")) {
+            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+                kotlinOptions {
+                    jvmTarget = "1.8"
+                }
+            }
         }
     }
 }
 
-// build compartilhado fora de /android
-rootProject.buildDir = "../build"
-
-// >>> NÃO force compileSdk/namespace aqui. <<<
-// A única coisa global útil: alinhar jvmTarget para Kotlin = 17.
 subprojects {
-    // Seta jvmTarget=17 para todas as tasks Kotlin (compatível com AGP 8.7.x / Kotlin 2.x)
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            jvmTarget = "17"
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.application") ||
+                project.plugins.hasPlugin("com.android.library")) {
+            project.android {
+                compileSdkVersion 35
+            }
         }
+        if (project.hasProperty('android')) {
+                project.android {
+                    if (namespace == null) {
+                        namespace project.group
+                    }
+                }
+            }
     }
-
-    // (Opcional) Centraliza a pasta de build por módulo
+}
+subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+subprojects {
+    project.evaluationDependsOn(':app')
+}
 
-// Evite evaluationDependsOn(':app') — atrapalha a ordem de avaliação
-tasks.register("clean", Delete) {
+task clean(type: Delete) {
     delete rootProject.buildDir
 }
