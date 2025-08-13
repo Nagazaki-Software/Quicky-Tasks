@@ -22,10 +22,12 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   # Braintree (via Git – evita depender do CDN)
-  pod 'BraintreeCore',          :git => 'https://github.com/braintree/braintree_ios.git', :tag => '5.33.0'
-  pod 'BraintreeCard',          :git => 'https://github.com/braintree/braintree_ios.git', :tag => '5.33.0'
-  pod 'BraintreeThreeDSecure',  :git => 'https://github.com/braintree/braintree_ios.git', :tag => '5.33.0'
-  pod 'BraintreeDataCollector', :git => 'https://github.com/braintree/braintree_ios.git', :tag => '5.33.0'
+  # Braintree (puxa direto do repo oficial)
+  pod 'BraintreeCore',          :git => 'https://github.com/braintree/braintree_ios.git', :branch => 'main'
+  pod 'BraintreeCard',          :git => 'https://github.com/braintree/braintree_ios.git', :branch => 'main'
+  pod 'BraintreeThreeDSecure',  :git => 'https://github.com/braintree/braintree_ios.git', :branch => 'main'
+  pod 'BraintreeDataCollector', :git => 'https://github.com/braintree/braintree_ios.git', :branch => 'main'
+
 end
 
 target 'ImageNotification' do
