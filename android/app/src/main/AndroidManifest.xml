@@ -35,7 +35,7 @@
               tools:replace="android:theme"/>
          <activity android:name="com.braintreepayments.api.ThreeDSecureActivity"
                android:exported="true"
-               android:theme="@style/Theme.AppCompat.Light"
+               android:theme="@style/Theme.Translucent.NoTitleBar.Fullscreen"
                tools:replace="android:theme"/>
 
         <!-- Main Activity Flutter -->
