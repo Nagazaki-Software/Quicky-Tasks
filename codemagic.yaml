@@ -1,0 +1,28 @@
+workflows:
+  ios-build:
+    name: iOS Build
+    environment:
+      vars:
+        FLUTTER_VERSION: stable
+    scripts:
+      - name: Atualizar CocoaPods e limpar cache
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          echo "🚀 Atualizando CocoaPods e limpando caches..."
+          gem install cocoapods -N || true
+          rm -rf "$HOME/Library/Caches/CocoaPods" || true
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData" || true
+          rm -rf "$HOME/.cocoapods/repos" || true
+          pod setup
+          cd ios
+          if ! grep -q "github.com/CocoaPods/Specs" Podfile; then
+            sed -i.bak '1isource "https://github.com/CocoaPods/Specs.git"' Podfile
+            sed -i.bak '1isource "https://cdn.cocoapods.org/"' Podfile
+          fi
+          pod deintegrate || true
+          rm -rf Pods Podfile.lock
+          pod install --repo-update --verbose
+          cd ..
+          flutter clean
+          flutter pub get
