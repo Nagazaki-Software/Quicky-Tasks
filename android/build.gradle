@@ -4,27 +4,23 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        // Repositório do Flutter usado por alguns plugins nativos
         maven { url "https://storage.googleapis.com/download.flutter.io" }
-
-        // Seu repositório interno (HTTP). Se tiver HTTPS, prefira usar HTTPS.
+        maven { url "https://jitpack.io" }
+        maven { url "https://maven.cardinalcommerce.com" }
         maven {
             url "http://maven.wdepos.com/repository/maven-public"
             allowInsecureProtocol true
-            // Se exigir auth, habilite credenciais via gradle.properties:
-            // credentials {
-            //     username = findProperty("WDEPOS_USER") ?: ""
-            //     password = findProperty("WDEPOS_PASS") ?: ""
-            // }
+            // credentials { ... } // se precisar
         }
     }
 }
-
 allprojects {
     repositories {
         google()
         mavenCentral()
         maven { url "https://storage.googleapis.com/download.flutter.io" }
+        maven { url "https://jitpack.io" }
+        maven { url "https://maven.cardinalcommerce.com" }
         maven {
             url "http://maven.wdepos.com/repository/maven-public"
             allowInsecureProtocol true
