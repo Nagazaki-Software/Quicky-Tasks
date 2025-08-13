@@ -24,70 +24,27 @@ workflows:
           set -euo pipefail
           flutter clean
           flutter pub get
+          # Garante que o Generated.xcconfig existe para o Podfile carregar o podhelper
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
-
-      # 🔧 PATCH: injeta as dependências do Braintree no podspec do plugin
-      - name: Patch braintree_native_ui.podspec
-        script: |
-          set -euo pipefail
-          PODSPEC="ios/.symlinks/plugins/braintree_native_ui/ios/braintree_native_ui.podspec"
-          if [ ! -f "$PODSPEC" ]; then
-            echo "Podspec do plugin não encontrado em $PODSPEC"; ls -la ios/.symlinks/plugins || true; exit 1
-          fi
-
-          echo "Antes do patch:"
-          grep -n "s.dependency" "$PODSPEC" || true
-
-          ruby - "$PODSPEC" <<'RB'
-            path = ARGV[0]
-            txt  = File.read(path)
-            # Garante o umbrella pod 'Braintree' (que expõe BraintreeCore/Card/ThreeDSecure/DataCollector)
-            need = !txt.include?("s.dependency 'Braintree'")
-            if need
-              txt.gsub!(/(Pod::Spec\.new do \|s\|.*?end)m/) do |spec|
-                spec.sub(/end\s*\z/m, "  s.dependency 'Braintree', '~> 5.31'\nend")
-              end
-              File.write(path, txt)
-              puts ">> Adicionado: s.dependency 'Braintree', '~> 5.31'"
-            else
-              puts ">> Já possui dependência 'Braintree' no podspec"
-            end
-          RB
-
-          echo "Depois do patch:"
-          grep -n "s.dependency" "$PODSPEC" || true
 
       - name: Instalar CocoaPods e atualizar repos
         script: |
           set -euo pipefail
-          gem install cocoapods -N --user-install || true
+          # Usa CocoaPods do ambiente (instalar só se faltar)
+          gem list -i cocoapods || gem install cocoapods -N --user-install
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
           pod --version
 
           cd ios
-
-          # Garante CDN no topo do Podfile
+          # Garante o CDN no topo do Podfile (idempotente)
           if ! grep -q "^source 'https://cdn.cocoapods.org/'" Podfile; then
             sed -i.bak "1isource 'https://cdn.cocoapods.org/'" Podfile
           fi
 
-          # Garante use_frameworks! (dinâmico ajuda módulos Swift)
-          if ! grep -q "^use_frameworks!" Podfile; then
-            # insere dentro do target 'Runner' se não existir
-            awk '
-              BEGIN{inrunner=0}
-              /target.*Runner/ {print; inrunner=1; next}
-              inrunner && /^\s*do\s*$/ {print; print "  use_frameworks!"; next}
-              /end/ && inrunner {inrunner=0; print; next}
-              {print}
-            ' Podfile > Podfile.tmp && mv Podfile.tmp Podfile
-          fi
-
-          # Atualiza e instala (com retry leve)
+          # Atualiza specs e instala (com retry leve)
           pod repo update
           (pod install --repo-update) || (echo "retry pod install..." && sleep 5 && pod install --repo-update)
-
           cd ..
 
       - name: Build iOS (release, no codesign)
