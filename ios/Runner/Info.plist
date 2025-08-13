@@ -20,7 +20,7 @@
     <string>$(FLUTTER_BUILD_NAME)</string>
     <key>CFBundleSignature</key>
     <string>????</string>
-    <!-- URL Schemes (FlutterFlow, Quicky e Braintree) -->
+    <!-- URL Schemes (FlutterFlow e Quicky) -->
     <key>CFBundleURLTypes</key>
     <array>
       <!-- FlutterFlow / Google Sign-In -->
@@ -41,17 +41,6 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>quicky</string>
-        </array>
-      </dict>
-      <!-- Braintree return URL -->
-      <dict>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleURLName</key>
-        <string>com.nagazakisoftware.quick.payments</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-          <string>com.nagazakisoftware.quick.payments</string>
         </array>
       </dict>
     </array>

@@ -27,8 +27,6 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 # <<< ESSA LINHA PRECISA EXISTIR >>>
 flutter_ios_podfile_setup
 
-# Braintree/Flutter funcionam bem com frameworks estáticos
-use_frameworks! :linkage => :static
 # ⚠️ Não use 'use_modular_headers!' global aqui (só se algum pod específico pedir)
 
 target 'Runner' do
@@ -50,10 +48,6 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       # Xcode 15 toolchain
       config.build_settings['SWIFT_VERSION'] = '5.9'
-      # Não tratar warnings como erro (Braintree/PayPal soltam depreciação)
-      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-      config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-      config.build_settings['OTHER_CFLAGS'] = '$(inherited) -Wno-deprecated-declarations'
     end
   end
 end
