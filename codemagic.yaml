@@ -4,28 +4,45 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ios/Pods
+        - ios/Podfile.lock
+        - ~/Library/Caches/CocoaPods
     scripts:
-      - name: Limpar e atualizar CocoaPods
+      # 1) Sempre gerar os artefatos do Flutter antes de mexer com CocoaPods
+      - name: Flutter clean & pub get
         script: |
-          #!/bin/bash
           set -euo pipefail
-          gem install cocoapods -N || true
-          rm -rf "$HOME/Library/Caches/CocoaPods" "$HOME/.cocoapods/repos" || true
-          pod setup
-          cd ios
-          # garante que o source CDN está no topo
-          if ! grep -q 'source.*cdn.cocoapods.org' Podfile; then
-            sed -i.bak '1isource "https://cdn.cocoapods.org/"' Podfile
-          fi
-          pod deintegrate || true
-          rm -rf Pods Podfile.lock
-          pod repo update
-          pod install --repo-update --verbose
-          cd ..
-      - name: Flutter clean & get
-        script: |
+          flutter --version
           flutter clean
           flutter pub get
+          # Garante que o Generated.xcconfig foi criado
+          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
+
+      # 2) CocoaPods com repositório CDN atualizado
+      - name: Instalar CocoaPods e atualizar repos
+        script: |
+          set -euo pipefail
+          gem install cocoapods -N || true
+          cd ios
+          # garante o CDN no topo do Podfile
+          if ! grep -q '^source[[:space:]]\x27https://cdn.cocoapods.org/\x27' Podfile; then
+            sed -i.bak '1isource '\''https://cdn.cocoapods.org/'\''' Podfile
+          fi
+          # NADA de deintegrate/remoção aqui; já temos Generated.xcconfig
+          pod repo update
+          pod install --repo-update
+          cd ..
+
+      # 3) Build iOS (sem codesign)
       - name: Build iOS (release, no codesign)
         script: |
+          set -euo pipefail
           flutter build ios --release --no-codesign
+
+    artifacts:
+      - build/ios/iphoneos/*.ipa
+      - build/ios/ipa/*.ipa
+      - build/ios/**/*.xcarchive
