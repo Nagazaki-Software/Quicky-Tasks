@@ -1,5 +1,5 @@
 source 'https://cdn.cocoapods.org/'
-$FirebaseAnalyticsWithoutAdIdSupport = true
+
 platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
@@ -26,22 +26,12 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # IMPORTANTE: não usar use_modular_headers!
-  use_frameworks! :linkage => :static
-
-  # Instala todos os pods do Flutter + plugins
+  use_frameworks!  # dinâmico (exponibiliza módulos Swift mais previsivelmente)
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
-  # ✅ Braintree via umbrella + subspecs (gera módulos Swift BraintreeCore, etc.)
-  # Não fixe versão; deixe o CDN resolver. Se precisar, use '~> 5.31'
-  pod 'Braintree', :subspecs => ['Core', 'Card', 'ThreeDSecure', 'DataCollector']
-  # Se for usar PayPal/Venmo:
-  # pod 'Braintree', :subspecs => ['Core', 'Card', 'ThreeDSecure', 'DataCollector', 'PayPal', 'Venmo']
 end
 
-# (Opcional) extensão de notificação se usa Messaging
 target 'ImageNotification' do
-  use_frameworks! :linkage => :static
+  use_frameworks!
   pod 'Firebase/Messaging'
 end
 
@@ -51,14 +41,6 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-        '$(inherited)',
-        'PERMISSION_CAMERA=1',
-        'PERMISSION_PHOTOS=1',
-        'PERMISSION_LOCATION=1',
-        'PERMISSION_MICROPHONE=1',
-        'PERMISSION_NOTIFICATIONS=1',
-      ]
     end
   end
 end
