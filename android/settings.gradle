@@ -12,6 +12,10 @@ pluginManagement {
     repositories {
         google()
         mavenCentral()
+        // (opcional) Flutter storage
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        // Cardinal tb pode aparecer no pluginManagement, mas o essencial é em dependencyResolutionManagement
+        maven { url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android") }
         gradlePluginPortal()
     }
 }
@@ -23,5 +27,18 @@ plugins {
     id "com.google.gms.google-services" version "4.3.8" apply false  // Google Services plugin
     
 }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        // 👇 Repositório do Cardinal (necessário para 3DS da Braintree)
+        maven { url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android") }
+        // (opcional) jitpack se você usa libs de lá
+        maven { url = uri("https://jitpack.io") }
+    }
+}
 
-include ":app"
+rootProject.name = "android"
+include(":app")
