@@ -1,7 +1,4 @@
 source 'https://cdn.cocoapods.org/'
-# (opcional) espelho git antigo; costuma não ser necessário, mas ajuda em runners que cacheiam mal
-# source 'https://github.com/CocoaPods/Specs.git'
-
 $FirebaseAnalyticsWithoutAdIdSupport = true
 platform :ios, '15.0'
 
@@ -33,18 +30,14 @@ target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  # Instala pods do Flutter + plugins
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # ✅ Braintree via subspecs corretos (NÃO use BraintreeCore/BraintreeCard como pods isolados)
-  # Pina numa versão 5.x estável; ajuste se o plugin exigir outra
-  pod 'Braintree', '~> 5.31'
-  pod 'Braintree/Card', '~> 5.31'
-  pod 'Braintree/ThreeDSecure', '~> 5.31'
-  pod 'Braintree/DataCollector', '~> 5.31'
-  # Se for usar PayPal/Venmo:
-  # pod 'Braintree/PayPal', '~> 5.31'
-  # pod 'Braintree/Venmo',  '~> 5.31'
+  # 👉 Braintree modular (NADA de 'pod "Braintree"')
+  pod 'BraintreeCore'
+  pod 'BraintreeCard'
+  pod 'BraintreeThreeDSecure'
+  pod 'BraintreeDataCollector'
+  # Se precisar: pod 'BraintreePayPal', pod 'BraintreeVenmo'
 end
 
 target 'ImageNotification' do
