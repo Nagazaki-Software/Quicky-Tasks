@@ -1,8 +1,13 @@
+# Habilita SDK do Analytics sem ID de Ads
 $FirebaseAnalyticsWithoutAdIdSupport = true
-# Uncomment this line to define a global platform for your project
-platform :ios, '15.0.0'
 
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+# Use o CDN oficial do CocoaPods (evita repo velho)
+source 'https://cdn.cocoapods.org/'
+
+# Plataforma alvo (use "15.0" em vez de "15.0.0")
+platform :ios, '15.0'
+
+# Desliga métricas (build mais rápido no CI)
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -26,50 +31,55 @@ end
 
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
 
+# Configurações padrão do Flutter para iOS
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  pod 'GoogleUtilities'
-pod 'BraintreeCore'
-  pod 'BraintreeCard'
-  pod 'BraintreeThreeDSecure'
-  pod 'BraintreeDataCollector'
+  # Frameworks estáticos evitam conflitos de linkagem Swift
   use_frameworks! :linkage => :static
   use_modular_headers!
 
+  # Instala todos os pods de Flutter + plugins
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
+
+  # --- Braintree: adiciona explicitamente os módulos usados pelo plugin ---
+  pod 'BraintreeCore'
+  pod 'BraintreeCard'
+  pod 'BraintreeThreeDSecure'
+  pod 'BraintreeDataCollector'
+  # Se for usar PayPal/Venmo: descomente
+  # pod 'BraintreePayPal'
+  # pod 'BraintreeVenmo'
+
+  # 🔥 Removido:
+  # - GoogleUtilities (vem transitivo pelo Firebase)
+  # - FirebaseFirestore via Git da Invertase (causa erros de tag/HEAD)
+  #   Deixe o FlutterFire resolver versões pelo CocoaPods (CDN acima).
+end
+
+# (Opcional) Target da extensão de notificação com Messaging
+target 'ImageNotification' do
+  use_frameworks! :linkage => :static
+  pod 'Firebase/Messaging'
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+      # Fixar o alvo iOS do projeto dos Pods
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # Garantir Swift 5
+      config.build_settings['SWIFT_VERSION'] = '5.0'
+      # Definições de permissões (se você usa permission_handler)
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
-
-        # dart: PermissionGroup.camera
         'PERMISSION_CAMERA=1',
-
-        # dart: PermissionGroup.photos
         'PERMISSION_PHOTOS=1',
-
-         # dart: [PermissionGroup.location, PermissionGroup.locationAlways, PermissionGroup.locationWhenInUse]
         'PERMISSION_LOCATION=1',
-
-        # dart: PermissionGroup.microphone
         'PERMISSION_MICROPHONE=1',
-
-        # dart: PermissionGroup.notification
         'PERMISSION_NOTIFICATIONS=1',
       ]
     end
   end
-end
-
-target 'ImageNotification' do
-  use_frameworks! :linkage => :static
-  pod 'Firebase/Messaging'
-  pod 'GoogleUtilities'
 end
