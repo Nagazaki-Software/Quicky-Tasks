@@ -26,24 +26,20 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
+  # IMPORTANTE: não usar use_modular_headers!
   use_frameworks! :linkage => :static
-  use_modular_headers!
 
-  # Instala todos os pods de Flutter + plugins
+  # Instala todos os pods do Flutter + plugins
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # ✅ Braintree via subspecs (forma correta no CocoaPods)
-  # NÃO fixe versão aqui, deixe o resolver do CDN trabalhar.
-  pod 'Braintree/Core'
-  pod 'Braintree/Card'
-  pod 'Braintree/ThreeDSecure'
-  pod 'Braintree/DataCollector'
-  # Se for usar Paypal/Venmo no app-switch:
-  # pod 'Braintree/PayPal'
-  # pod 'Braintree/Venmo'
+  # ✅ Braintree via umbrella + subspecs (gera módulos Swift BraintreeCore, etc.)
+  # Não fixe versão; deixe o CDN resolver. Se precisar, use '~> 5.31'
+  pod 'Braintree', :subspecs => ['Core', 'Card', 'ThreeDSecure', 'DataCollector']
+  # Se for usar PayPal/Venmo:
+  # pod 'Braintree', :subspecs => ['Core', 'Card', 'ThreeDSecure', 'DataCollector', 'PayPal', 'Venmo']
 end
 
-# (Opcional) extensão de notificação se você usa Messaging
+# (Opcional) extensão de notificação se usa Messaging
 target 'ImageNotification' do
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
