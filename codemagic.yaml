@@ -11,11 +11,19 @@ workflows:
         - ios/Podfile.lock
         - ~/Library/Caches/CocoaPods
     scripts:
-      # 1) Sempre gerar os artefatos do Flutter antes de mexer com CocoaPods
-      - name: Flutter clean & pub get
+      # 0) Info de ambiente (útil pra debug)
+      - name: Versions
         script: |
           set -euo pipefail
           flutter --version
+          xcodebuild -version
+          ruby -v || true
+          pod --version || true
+
+      # 1) Sempre gerar artefatos do Flutter antes de mexer com CocoaPods
+      - name: Flutter clean & pub get
+        script: |
+          set -euo pipefail
           flutter clean
           flutter pub get
           # Garante que o Generated.xcconfig foi criado
@@ -25,15 +33,24 @@ workflows:
       - name: Instalar CocoaPods e atualizar repos
         script: |
           set -euo pipefail
-          gem install cocoapods -N || true
+          # Instala user-local caso a imagem precise
+          gem install cocoapods -N --user-install || true
+          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
+          export PATH="$GEM_BIN:$PATH"
+          pod --version
+
           cd ios
-          # garante o CDN no topo do Podfile
-          if ! grep -q '^source[[:space:]]\x27https://cdn.cocoapods.org/\x27' Podfile; then
-            sed -i.bak '1isource '\''https://cdn.cocoapods.org/'\''' Podfile
+
+          # Garante o CDN no topo do Podfile (idempotente)
+          if ! grep -q "^source 'https://cdn.cocoapods.org/'" Podfile; then
+            sed -i.bak "1isource 'https://cdn.cocoapods.org/'" Podfile
           fi
-          # NADA de deintegrate/remoção aqui; já temos Generated.xcconfig
+
           pod repo update
-          pod install --repo-update
+
+          # Retry leve em caso de flutuação de rede/CDN
+          (pod install --repo-update) || (echo "pod install falhou, tentando novamente..." && sleep 5 && pod install --repo-update)
+
           cd ..
 
       # 3) Build iOS (sem codesign)
