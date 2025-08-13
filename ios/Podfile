@@ -6,6 +6,7 @@ platform :ios, '14.0.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 # Caminho para o projeto Flutter
+flutter_root = File.expand_path('..', __dir__)
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
 
 flutter_ios_podfile_setup
