@@ -694,7 +694,8 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                   logFirebaseEvent('CARDPLACEHOKDER_COMP_BUY_BTN_ON_TAP');
                   logFirebaseEvent('Button_custom_action');
                   _model.rapydPayment = await actions.generateAuthorizeNetNonce(
-                    'sandbox_ck9vkcgg_brg8dhjg5tqpw496\t',
+                    'sandbox_api_login_id',
+                    'sandbox_ck9vkcgg_brg8dhjg5tqpw496',
                     _model.textController1.text,
                     functions.retirepartesdadata(
                         _model.textController2.text, 'month')!,
@@ -705,6 +706,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                     'https://us-central1-quick-b108e.cloudfunctions.net/baintreePayment',
                     _model.textController4.text,
                     'Quicky QS Tokens',
+                    'test',
                   );
                   logFirebaseEvent('Button_bottom_sheet');
                   await showModalBottomSheet(
