@@ -16,12 +16,28 @@ pluginManagement {
     }
 }
 
+dependencyResolutionManagement {
+    // Mantém os repositórios definidos aqui como fonte principal
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        // Repositório do Flutter para artefatos nativos de alguns plugins
+        maven { url "https://storage.googleapis.com/download.flutter.io" }
+    }
+}
+
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+
+    // Alinhado com Gradle 8.9 (veja o passo 2)
     id "com.android.application" version "8.7.3" apply false
-    id "org.jetbrains.kotlin.android" version "2.1.0" apply false
-    id "com.google.gms.google-services" version "4.3.8" apply false  // Google Services plugin
-    
+
+    // Kotlin estável e compatível com AGP 8.7.x
+    id "org.jetbrains.kotlin.android" version "2.0.21" apply false
+
+    // Google Services atualizado (o 4.3.8 é velho e dá conflito)
+    id "com.google.gms.google-services" version "4.4.2" apply false
 }
 
 include ":app"
