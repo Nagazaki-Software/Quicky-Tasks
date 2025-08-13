@@ -5,9 +5,13 @@ platform :ios, '14.0.0'
 # Desativando as estatísticas do CocoaPods (opcional, mas pode melhorar o tempo de build)
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# Caminho para o projeto Flutter
-flutter_root = File.expand_path('..', __dir__)
-require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+# Caminho para o SDK do Flutter
+flutter_root = ENV['FLUTTER_ROOT'] || File.expand_path('..', __dir__)
+podhelper_path = File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+unless File.exist?(podhelper_path + '.rb')
+  raise "Não foi possível localizar o podhelper do Flutter em #{podhelper_path}. Defina a variável de ambiente FLUTTER_ROOT para o diretório do SDK do Flutter."
+end
+require podhelper_path
 
 flutter_ios_podfile_setup
 
