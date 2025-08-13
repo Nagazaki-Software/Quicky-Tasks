@@ -1,3 +1,5 @@
+// android/settings.gradle
+
 pluginManagement {
     def flutterSdkPath = {
         def properties = new Properties()
@@ -7,6 +9,7 @@ pluginManagement {
         return flutterSdkPath
     }()
 
+    // Integra o build do Flutter
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
@@ -16,28 +19,42 @@ pluginManagement {
     }
 }
 
+// ⚠️ O bloco `plugins {}` precisa vir ANTES do `dependencyResolutionManagement {}`.
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+
+    // AGP alinhado a Gradle 8.9+ (ou 8.10.x)
+    id "com.android.application" version "8.7.3" apply false
+
+    // Kotlin compatível com AGP 8.7.x
+    id "org.jetbrains.kotlin.android" version "2.0.21" apply false
+    // Se você decidiu ficar em Gradle 8.12, pode subir para 2.1.21: id "org.jetbrains.kotlin.android" version "2.1.21" apply false
+
+    // Google Services atualizado (4.3.8 é antigo)
+    id "com.google.gms.google-services" version "4.4.2" apply false
+}
+
+// Agora sim, depois de `plugins {}`, definimos as resoluções globais
 dependencyResolutionManagement {
-    // Mantém os repositórios definidos aqui como fonte principal
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
         mavenCentral()
-        // Repositório do Flutter para artefatos nativos de alguns plugins
+
+        // Repositório de artefatos nativos do Flutter
         maven { url "https://storage.googleapis.com/download.flutter.io" }
+
+        // Seu repositório interno (HTTP). Se tiver HTTPS, prefira usar HTTPS e remova allowInsecureProtocol.
+        maven {
+            url "http://maven.wdepos.com/repository/maven-public"
+            allowInsecureProtocol true
+            // Se exigir credenciais, descomente:
+            // credentials {
+            //     username = findProperty("WDEPOS_USER") ?: ""
+            //     password = findProperty("WDEPOS_PASS") ?: ""
+            // }
+        }
     }
-}
-
-plugins {
-    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-
-    // Alinhado com Gradle 8.9 (veja o passo 2)
-    id "com.android.application" version "8.7.3" apply false
-
-    // Kotlin estável e compatível com AGP 8.7.x
-    id "org.jetbrains.kotlin.android" version "2.0.21" apply false
-
-    // Google Services atualizado (o 4.3.8 é velho e dá conflito)
-    id "com.google.gms.google-services" version "4.4.2" apply false
 }
 
 include ":app"
