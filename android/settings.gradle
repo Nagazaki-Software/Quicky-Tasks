@@ -13,7 +13,17 @@ pluginManagement {
         google()
         mavenCentral()
         maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
-        maven { url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android") }
+        def cardinalUsername = System.getenv("CARDINAL_USERNAME")
+        def cardinalPassword = System.getenv("CARDINAL_PASSWORD")
+        maven {
+            url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android")
+            if (cardinalUsername && cardinalPassword) {
+                credentials {
+                    username = cardinalUsername
+                    password = cardinalPassword
+                }
+            }
+        }
         gradlePluginPortal()
     }
 }
@@ -32,7 +42,17 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
-        maven { url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android") }
+        def cardinalUsername = System.getenv("CARDINAL_USERNAME")
+        def cardinalPassword = System.getenv("CARDINAL_PASSWORD")
+        maven {
+            url = uri("https://cardinalcommerceprod.jfrog.io/artifactory/android")
+            if (cardinalUsername && cardinalPassword) {
+                credentials {
+                    username = cardinalUsername
+                    password = cardinalPassword
+                }
+            }
+        }
         maven { url = uri("https://jitpack.io") }
     }
 }
