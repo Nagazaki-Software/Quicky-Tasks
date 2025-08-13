@@ -15,7 +15,6 @@
   >
     <!-- Habilita Google Pay na Drop-in (opcional, mas recomendado se usar GPay) -->
     <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
-    <!-- Requer também configuração no painel do Braintree -->
     <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
       <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
       <meta-data android:name="io.flutter.embedding.android.SplashScreenDrawable" android:resource="@drawable/launch_background"/>
@@ -31,14 +30,6 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="quicky" android:host="quicky.com"/>
-      </intent-filter>
-      <!-- 🔑 Braintree (Browser Switch / PayPal/Venmo) -->
-      <!-- IMPORTANTE: o scheme DEVE ser tudo minúsculo e seguir: <applicationId>.braintree -->
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW"/>
-        <category android:name="android.intent.category.DEFAULT"/>
-        <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="com.nagazakisoftware.quick.braintree"/>
       </intent-filter>
     </activity>
     <meta-data android:name="flutterEmbedding" android:value="2"/>

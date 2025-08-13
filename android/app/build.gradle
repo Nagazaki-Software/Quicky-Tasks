@@ -28,7 +28,7 @@ android {
 
     defaultConfig {
         applicationId "com.nagazakisoftware.quick"
-        minSdkVersion 23       // Braintree pede 21+, aqui tá ok
+        minSdkVersion 23
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
