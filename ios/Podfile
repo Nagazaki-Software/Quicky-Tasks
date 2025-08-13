@@ -14,14 +14,9 @@ flutter_ios_podfile_setup
 target 'Runner' do
   # Dependências do Firebase e outras
   pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
-  
-  # Adicionando as dependências do Braintree
-  pod 'BraintreeDropIn', '~> 5.8.0'  # Dependência do Drop-in UI
-  pod 'Braintree', '~> 5.8.0'        # Dependência principal do Braintree
-  
-  # Se você estiver utilizando o PayPal ou Google Pay, também adicione:
-  pod 'BraintreePayPal', '~> 5.8.0'
-  pod 'BraintreeGooglePay', '~> 5.8.0'
+
+  # O plugin `braintree_flutter_plus` já inclui as dependências do Braintree.
+  # Removendo pods duplicados evita erros de CocoaPods.
 
   use_frameworks! :linkage => :static
   use_modular_headers!
