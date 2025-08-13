@@ -33,10 +33,10 @@
               android:launchMode="singleTask"
               android:theme="@style/bt_drop_in_activity_theme"
               tools:replace="android:theme"/>
-              android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
-        <activity android:name="com.braintreepayments.api.ThreeDSecureActivity"
-              android:theme="@style/Theme.AppCompat.Light"
-              android:exported="true"/>
+         <activity android:name="com.braintreepayments.api.ThreeDSecureActivity"
+               android:exported="true"
+               android:theme="@style/Theme.AppCompat.Light"
+               tools:replace="android:theme"/>
 
         <!-- Main Activity Flutter -->
         <activity android:name=".MainActivity" 
