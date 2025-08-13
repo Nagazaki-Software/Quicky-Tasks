@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'index.dart'; // Imports other custom actions
+
 import 'package:authorize_net_sdk_plugin/authorize_net_sdk_plugin.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -55,14 +57,16 @@ Future<String> generateAuthorizeNetNonce(
 
     // --- 2) Gera o nonce do cartão ---
     final nonce = (await plugin.generateNonce(
-      apiLoginId: apiLoginId,
-      clientKey: clientKey,
-      cardNumber: digitsOnly,
-      expirationMonth: mm,
-      expirationYear: yyyy,
-      cardCode: cardCvv.trim(),
-      environment: environment,
-    ))?.trim() ?? '';
+          apiLoginId: apiLoginId,
+          clientKey: clientKey,
+          cardNumber: digitsOnly,
+          expirationMonth: mm,
+          expirationYear: yyyy,
+          cardCode: cardCvv.trim(),
+          environment: environment,
+        ))
+            ?.trim() ??
+        '';
     if (nonce.isEmpty) {
       throw Exception('Falha ao gerar nonce do cartão.');
     }
