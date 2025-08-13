@@ -19,39 +19,34 @@ pluginManagement {
     }
 }
 
-// ⚠️ O bloco `plugins {}` precisa vir ANTES do `dependencyResolutionManagement {}`.
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-
-    // AGP alinhado a Gradle 8.9+ (ou 8.10.x)
     id "com.android.application" version "8.7.3" apply false
-
-    // Kotlin compatível com AGP 8.7.x
     id "org.jetbrains.kotlin.android" version "2.0.21" apply false
-    // Se você decidiu ficar em Gradle 8.12, pode subir para 2.1.21: id "org.jetbrains.kotlin.android" version "2.1.21" apply false
-
-    // Google Services atualizado (4.3.8 é antigo)
     id "com.google.gms.google-services" version "4.4.2" apply false
 }
 
-// Agora sim, depois de `plugins {}`, definimos as resoluções globais
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS) // ou FAIL_ON_PROJECT_REPOS (ver nota abaixo)
     repositories {
         google()
         mavenCentral()
-
-        // Repositório de artefatos nativos do Flutter
         maven { url "https://storage.googleapis.com/download.flutter.io" }
 
-        // Seu repositório interno (HTTP). Se tiver HTTPS, prefira usar HTTPS e remova allowInsecureProtocol.
+        // ✅ JitPack — necessário para com.github.Tap-Payments:TapGooglePayKit
+        maven { url "https://jitpack.io" }
+
+        // ✅ Cardinal Commerce — necessário para cardinalmobilesdk
+        maven { url "https://maven.cardinalcommerce.com" }
+
+        // ✅ Seu repo interno (troque para https se existir; senão mantenha http + allowInsecureProtocol)
         maven {
             url "http://maven.wdepos.com/repository/maven-public"
             allowInsecureProtocol true
-            // Se exigir credenciais, descomente:
+            // Se exigir login, descomente e defina em ~/.gradle/gradle.properties:
             // credentials {
-            //     username = findProperty("WDEPOS_USER") ?: ""
-            //     password = findProperty("WDEPOS_PASS") ?: ""
+            //   username = findProperty("WDEPOS_USER") ?: ""
+            //   password = findProperty("WDEPOS_PASS") ?: ""
             // }
         }
     }
