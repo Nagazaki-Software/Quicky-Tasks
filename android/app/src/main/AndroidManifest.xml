@@ -23,6 +23,19 @@
         <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
 
         <!-- Activities do Braintree -->
+        <activity
+            android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <!-- Braintree PayPal callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.nagazakisoftware.quick.payments" />
+            </intent-filter>
+        </activity>
         <activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity"
               android:exported="true"
               android:launchMode="singleTask"
@@ -59,14 +72,6 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="quicky" android:host="quicky.com"/>
-            </intent-filter>
-
-            <!-- Deep Linking para retorno Braintree PayPal -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="com.nagazakisoftware.quick.payments"/>
             </intent-filter>
         </activity>
 
