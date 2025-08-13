@@ -54,28 +54,36 @@ android {
         checkReleaseBuilds false
     }
 
-    signingConfigs {
-        release {
+    def hasKeystore = keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()
+
+signingConfigs {
+    debug {
+        // padrão do Android/Flutter
+    }
+    release {
+        if (hasKeystore) {
             keyAlias keystoreProperties['keyAlias']
             keyPassword keystoreProperties['keyPassword']
-            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storeFile file(keystoreProperties['storeFile'])
             storePassword keystoreProperties['storePassword']
         }
     }
+}
 
-    buildTypes {
-        release {
-            // Use o keystore de release (não o debug)
-            signingConfig signingConfigs.release
-            minifyEnabled true                // ativa shrink; ajuste se preferir
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            // se quiser, mantém debug com minify off
-            minifyEnabled false
-        }
+buildTypes {
+    release {
+        // se não houver keystore de release, cai pro debug pra não falhar
+        signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
+        minifyEnabled true
+        shrinkResources true
+        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
     }
+    debug {
+        signingConfig signingConfigs.debug
+        minifyEnabled false
+    }
+}
+
 
     // (Opcional) evitar colisão de licenças em libs de terceiros
     packagingOptions {
