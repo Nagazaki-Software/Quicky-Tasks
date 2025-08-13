@@ -33,6 +33,7 @@
               android:launchMode="singleTask"
               android:theme="@style/bt_drop_in_activity_theme"
               tools:replace="android:theme"/>
+              android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
         <activity android:name="com.braintreepayments.api.ThreeDSecureActivity"
               android:theme="@style/Theme.AppCompat.Light"
               android:exported="true"/>
