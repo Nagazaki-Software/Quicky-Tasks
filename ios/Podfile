@@ -4,11 +4,13 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+    # ⚠️ Temporariamente desabilite cache de Pods
     cache:
       cache_paths:
         - ~/.pub-cache
-        - ios/Pods
-        - ios/Podfile.lock
+        # Remova Pods/Podfile.lock do cache até estabilizar o build
+        # - ios/Pods
+        # - ios/Podfile.lock
         - ~/Library/Caches/CocoaPods
 
     scripts:
@@ -18,11 +20,12 @@ workflows:
           flutter --version && xcodebuild -version
           ruby -v || true; pod --version || true
 
-      - name: Install CocoaPods 1.16.2
+      - name: Install CocoaPods 1.16.2 (persist PATH)
         script: |
           set -euo pipefail
           gem uninstall cocoapods -aIx || true
           gem install cocoapods -v 1.16.2 -N --user-install
+          # Persistir PATH para TODOS os próximos passos
           echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
           source $CM_ENV
@@ -35,25 +38,34 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Pod install (clean)
+      - name: Pod install (clean, com sanity checks)
         script: |
           set -euo pipefail
           source $CM_ENV
+
+          # Limpeza real
           cd ios
           rm -rf Pods Podfile.lock .symlinks
           pod repo update
-          pod install
+
+          # Use explicitamente a versão instalada (evita 'pod' antigo no PATH do sistema)
+          pod _1.16.2_ install
+
           echo "== Verificando Flutter pod =="
-          ls -la Pods/Flutter || true
-          find Pods/Flutter -maxdepth 4 -print | sed -n '1,120p' || true
-          grep -R "Flutter.h" Pods -n || true
+          test -d Pods/Flutter/Flutter.xcframework || { echo "FALHA: Pods/Flutter/Flutter.xcframework não existe"; exit 1; }
+          # Alguns setups não geram um diretório 'Flutter' direto em Headers/Public;
+          # mas o header deve existir em algum lugar:
+          grep -R "Flutter.h" Pods -n || { echo "FALHA: 'Flutter.h' não encontrado nos Pods"; exit 1; }
+
           cd ..
 
-      - name: Build iOS (release, no codesign)
+      - name: Build iOS (release, no codesign) usando o mesmo PATH
         script: |
           set -euo pipefail
           source $CM_ENV
           flutter pub get
+          # Forçar novamente a versão do pod se o build invocar 'pod' por baixo dos panos
+          which pod && pod --version
           flutter build ios --release --no-codesign
 
     artifacts:
