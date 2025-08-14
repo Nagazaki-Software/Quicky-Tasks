@@ -69,7 +69,12 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # ⚠️ Sem use_frameworks!: libs estáticas funcionam melhor com plugins Flutter
+            # ⚠️ SEM use_frameworks!: libs estáticas funcionam melhor com plugins Flutter
+
+            # Garante o Pod 'Flutter' presente (força a integração do engine/headers)
+            pod 'Flutter', :path => 'Flutter'
+
+            # Plugins do Flutter
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree 6.x via CocoaPods (não via git)
@@ -78,7 +83,7 @@ workflows:
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
 
-            # (Opcional) Se algum pod específico insistir, pode modularizar pontualmente:
+            # (Opcional) Se algum pod específico insistir, modularize pontualmente:
             # pod 'SDWebImage', :modular_headers => true
           end
 
@@ -117,28 +122,37 @@ workflows:
             # Usa o wrapper (não chama o helper direto)
             _call_flutter_build_settings_safely(installer)
 
-            # Garante iOS mínimo, Swift 5 e headers do Flutter nos search paths
+            # Garante iOS mínimo, Swift 5 e caminhos de headers/frameworks do Flutter
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                 config.build_settings['SWIFT_VERSION'] = '5.0'
-                existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
-                extra = [
+
+                # Headers (para includes <>)
+                existing_h = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+                extra_h = [
                   '$(PODS_ROOT)/Headers/Public',
-                  '$(PODS_ROOT)/Headers/Public/Flutter',
-                  # ✅ cobre tanto layout antigo (framework) quanto o novo (xcframework)
-                  '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
-                  '$(PODS_ROOT)/Flutter/Flutter.xcframework/**/Headers'
+                  '$(PODS_ROOT)/Headers/Public/Flutter'
                 ]
-                config.build_settings['HEADER_SEARCH_PATHS'] = Array(existing) + extra
+                config.build_settings['HEADER_SEARCH_PATHS'] = Array(existing_h) + extra_h
+
+                # Frameworks (para <Flutter/Flutter.h> via framework-style include)
+                existing_f = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || '$(inherited)'
+                extra_f = [
+                  '$(PODS_ROOT)/Flutter',
+                  '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter',
+                  '$(PODS_XCFRAMEWORKS_BUILD_DIR)/Flutter'
+                ]
+                config.build_settings['FRAMEWORK_SEARCH_PATHS'] = Array(existing_f) + extra_f
+
                 config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
               end
             end
           end
           PODFILE
 
-          echo "== Podfile final (1..220) =="
-          nl -ba ios/Podfile | sed -n '1,220p'
+          echo "== Podfile final (1..240) =="
+          nl -ba ios/Podfile | sed -n '1,240p'
 
       - name: Install CocoaPods
         script: |
@@ -165,10 +179,10 @@ workflows:
           pod _1.15.2_ deintegrate || true
           pod _1.15.2_ install --repo-update
 
-          # debug opcional: confirma headers do Flutter
-          echo "== Debug Flutter headers =="
+          # debug opcional: confirma headers/framework do Flutter
+          echo "== Debug Flutter pod =="
           ls -la Pods/Flutter || true
-          find Pods/Flutter -name Headers -maxdepth 4 -print || true
+          find Pods/Flutter -maxdepth 4 -print || true
           grep -R "Flutter.h" Pods -n || true
           cd ..
 
