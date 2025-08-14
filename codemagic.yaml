@@ -89,16 +89,27 @@ workflows:
       - name: Install CocoaPods
         script: |
           set -euo pipefail
-          # força versão mais estável com Flutter (evita incompatibilidades do 1.16.x)
-          gem list -i cocoapods -v 1.15.2 || gem install cocoapods -v 1.15.2 -N --user-install
+
+          # Limpa qualquer versão existente e instala 1.15.2
+          gem uninstall cocoapods -aIx || true
+          gem install cocoapods -v 1.15.2 -N --user-install
+
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
+
+          echo "CocoaPods version:"
+          pod --version
+
           cd ios
           rm -f Podfile.lock
           rm -rf Pods
-          pod repo update
-          pod install --repo-update || (echo "retry pod install..." && sleep 5 && pod install --repo-update)
+
+          # Invocação VERSIONADA garante que é a 1.15.2, mesmo se outra estiver no PATH
+          pod _1.15.2_ repo update
+          pod _1.15.2_ deintegrate || true
+          pod _1.15.2_ install --repo-update
           cd ..
+
 
       - name: Build iOS (release, no codesign)
         script: |
