@@ -1,7 +1,9 @@
-# ios/Podfile
 source 'https://cdn.cocoapods.org/'
 platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Evita warning do master specs
+install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
 project 'Runner', {
   'Debug' => :debug,
@@ -9,7 +11,6 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# Descobre FLUTTER_ROOT a partir do Generated.xcconfig
 def flutter_root
   generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
   raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
@@ -24,13 +25,12 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # ✅ Gera módulos Swift sem precisar de modular headers globais
+  # Gera módulos Swift sem modular headers globais
   use_frameworks! :linkage => :static
 
-  # Instala todos os pods dos plugins Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree 6.x (seu caso)
+  # Braintree 6.x
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -42,6 +42,8 @@ post_install do |installer|
     flutter_additional_ios_build_settings(t)
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      # ⚠️ Deixe o CocoaPods controlar essa flag; evite override no Runner target
+      c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
 end
