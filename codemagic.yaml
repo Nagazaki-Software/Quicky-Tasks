@@ -125,7 +125,10 @@ workflows:
                 existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
                 extra = [
                   '$(PODS_ROOT)/Headers/Public',
-                  '$(PODS_ROOT)/Headers/Public/Flutter'
+                  '$(PODS_ROOT)/Headers/Public/Flutter',
+                  # ✅ cobre tanto layout antigo (framework) quanto o novo (xcframework)
+                  '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
+                  '$(PODS_ROOT)/Flutter/Flutter.xcframework/**/Headers'
                 ]
                 config.build_settings['HEADER_SEARCH_PATHS'] = Array(existing) + extra
                 config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
@@ -134,8 +137,8 @@ workflows:
           end
           PODFILE
 
-          echo "== Podfile final (1..200) =="
-          nl -ba ios/Podfile | sed -n '1,200p'
+          echo "== Podfile final (1..220) =="
+          nl -ba ios/Podfile | sed -n '1,220p'
 
       - name: Install CocoaPods
         script: |
@@ -161,8 +164,12 @@ workflows:
           pod _1.15.2_ repo update
           pod _1.15.2_ deintegrate || true
           pod _1.15.2_ install --repo-update
-          # debug opcional
-          (grep -R "module.modulemap" Pods/ -n | head || true)
+
+          # debug opcional: confirma headers do Flutter
+          echo "== Debug Flutter headers =="
+          ls -la Pods/Flutter || true
+          find Pods/Flutter -name Headers -maxdepth 4 -print || true
+          grep -R "Flutter.h" Pods -n || true
           cd ..
 
       - name: Build iOS (release, no codesign)
