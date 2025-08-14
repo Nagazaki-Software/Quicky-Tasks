@@ -30,6 +30,9 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="quicky" android:host="quicky.com"/>
       </intent-filter>
+      <intent-filter>
+        <action android:name="es.antonborri.home_widget.action.LAUNCH" />
+      </intent-filter>
     </activity>
     <!-- ============================ -->
     <!-- Braintree: Drop-in + 3DS2   -->
@@ -52,5 +55,19 @@
     <!-- ============================ -->
     <!-- Usado pelo Flutter -->
     <meta-data android:name="flutterEmbedding" android:value="2"/>
+
+    <receiver android:name=".QuickyWidgetProvider" android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/quicky_widget_provider" />
+    </receiver>
+
+    <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
+      </intent-filter>
+    </receiver>
+    <service android:name="es.antonborri.home_widget.HomeWidgetBackgroundService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true"/>
   </application>
 </manifest>
