@@ -23,13 +23,13 @@ def flutter_root
   raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}."
 end
 
-# Helper do Flutter (use a versão .rb)
+# Helper do Flutter (.rb!)
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Linkagem estática reduz dor de cabeça com frameworks
+  # Linkagem estática reduz dor de cabeça com frameworks e velocidade de linkedição
   use_frameworks! :linkage => :static
 
   # Plugins do Flutter
@@ -49,11 +49,27 @@ target 'ImageNotification' do
 end
 
 post_install do |installer|
-  # 👉 TUA VERSÃO DO podhelper ESPERA TARGET, NÃO INSTALLER
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
+  # ⚙️ ADAPTADOR: chama flutter_additional_ios_build_settings do jeito que o teu Flutter espera
+  if self.respond_to?(:flutter_additional_ios_build_settings)
+    # arity: -1 => aceita qualquer número de args; 1 => 1 arg; 0 => sem args (raríssimo)
+    ar = method(:flutter_additional_ios_build_settings).arity
+    case ar
+    when 1
+      # Versões que esperam TARGET
+      installer.pods_project.targets.each do |t|
+        flutter_additional_ios_build_settings(t)
+      end
+    when 0
+      # Quase não aparece, mas deixo por segurança
+      flutter_additional_ios_build_settings
+    else
+      # Versões antigas que esperam INSTALLER
+      flutter_additional_ios_build_settings(installer)
+    end
+  end
 
-    # Garante iOS mínimo e Swift coerentes em todos os pods
+  # Garante iOS mínimo e Swift coerentes em todos os pods
+  installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
