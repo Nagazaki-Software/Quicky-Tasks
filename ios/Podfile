@@ -1,4 +1,4 @@
-# Podfile gerado para Flutter + Braintree (CocoaPods)
+# Podfile gerado para Flutter + Braintree (CocoaPods) sem use_frameworks!
 source 'https://cdn.cocoapods.org/'
 platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -9,10 +9,7 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# Descobre o FLUTTER_ROOT de forma robusta:
-# 1) Lê do ios/Flutter/Generated.xcconfig (padrão do Flutter)
-# 2) Se não existir, tenta ENV['FLUTTER_ROOT']
-# 3) Se ainda não existir, roda `flutter pub get` e tenta de novo
+# Descobre o FLUTTER_ROOT de forma robusta
 def flutter_root
   generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
 
@@ -27,7 +24,7 @@ def flutter_root
     return ENV['FLUTTER_ROOT']
   end
 
-  # Tenta regenerar silenciosamente
+  # tenta regenerar silenciosamente
   system('bash', '-lc', 'cd .. && flutter pub get 1>/dev/null 2>&1')
   if File.exist?(generated_xcconfig)
     File.foreach(generated_xcconfig) do |line|
@@ -39,28 +36,23 @@ def flutter_root
   raise "Generated.xcconfig não encontrado e ENV['FLUTTER_ROOT'] não definida. Rode `flutter pub get` na raiz do projeto."
 end
 
-# Helper do Flutter (.rb)
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Linkagem estática = menos treta de linkagem
-  use_frameworks! :linkage => :static
-
-  # Plugins do Flutter
+  # ⚠️ sem use_frameworks! — libs estáticas funcionam melhor com plugins Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
+  # Braintree via CocoaPods (NÃO via git), linha 6.x
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
 end
 
-# Se tiver targets extras, descomente/ajuste:
+# Se tiver mais targets, adicione aqui (também sem use_frameworks!)
 # target 'ImageNotification' do
-#   use_frameworks! :linkage => :static
 #   pod 'Firebase/Messaging'
 # end
 
@@ -71,16 +63,13 @@ def _call_flutter_build_settings_safely(installer)
   begin
     arity = method(:flutter_additional_ios_build_settings).arity
   rescue
-    # mantém -1
   end
 
   if arity == 1
-    # versões recentes: recebe TARGET
     installer.pods_project.targets.each do |t|
       begin
         flutter_additional_ios_build_settings(t)
       rescue NoMethodError, ArgumentError
-        # tenta outras variantes abaixo
       end
     end
     return
@@ -94,11 +83,9 @@ def _call_flutter_build_settings_safely(installer)
     end
   end
 
-  # fallback: versões antigas: recebe INSTALLER
   begin
     flutter_additional_ios_build_settings(installer)
   rescue NoMethodError, ArgumentError
-    # não deixa o hook quebrar
   end
 end
 # ============================================================================
@@ -107,11 +94,18 @@ post_install do |installer|
   # NUNCA chamar o helper direto: usa o wrapper
   _call_flutter_build_settings_safely(installer)
 
-  # Garante iOS mínimo e Swift coerentes
+  # Ajustes globais de build (inclui headers do Flutter nos search paths)
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
+      # Header search paths para módulos que incluem <Flutter/Flutter.h>
+      existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+      extra = ['$(PODS_ROOT)/Headers/Public', '$(PODS_ROOT)/Headers/Public/Flutter']
+      config.build_settings['HEADER_SEARCH_PATHS'] =
+        Array(existing) + extra
+      # Garante módulos habilitados
+      config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
     end
   end
 end
