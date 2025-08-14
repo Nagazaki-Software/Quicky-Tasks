@@ -7,7 +7,7 @@ workflows:
     cache:
       cache_paths:
         - ~/.pub-cache
-        # Reative o cache de Pods/Podfile.lock depois que estabilizar
+        # Reative estes dois depois que estabilizar:
         # - ios/Pods
         # - ios/Podfile.lock
         - ~/Library/Caches/CocoaPods
@@ -19,7 +19,7 @@ workflows:
           flutter --version && xcodebuild -version
           ruby -v || true; pod --version || true
 
-      - name: Install CocoaPods 1.16.2
+      - name: Install CocoaPods 1.16.2 (persist PATH)
         script: |
           set -euo pipefail
           gem uninstall cocoapods -aIx || true
@@ -29,17 +29,79 @@ workflows:
           source $CM_ENV
           pod --version
 
-      - name: Flutter clean & pub get
+      - name: Flutter clean, precache & pub get
         script: |
           set -euo pipefail
           flutter clean
+          # Precache iOS para garantir Flutter.xcframework local
+          flutter precache --ios
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      # Se quiser gerar o Podfile no CI, mantenha o passo de heredoc aqui.
-      # Caso contrário, comite o Podfile no repo e remova este passo.
+      - name: Escrever/Atualizar Podfile (se você preferir gerar no CI)
+        script: |
+          set -euo pipefail
+          mkdir -p ios
+          cat > ios/Podfile <<'PODFILE'
+          source 'https://cdn.cocoapods.org/'
+          platform :ios, '14.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+          install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
-      - name: Pod install (clean)
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
+
+          def flutter_root
+            generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+            File.foreach(generated_xcconfig) do |line|
+              m = line.match(/FLUTTER_ROOT\=(.*)/)
+              return m[1].strip if m
+            end
+            raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+          end
+
+          require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+          flutter_ios_podfile_setup
+
+          target 'Runner' do
+            use_frameworks! :linkage => :static
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+            pod 'Braintree',               '~> 6.36'
+            pod 'Braintree/Card',          '~> 6.36'
+            pod 'Braintree/ThreeDSecure',  '~> 6.36'
+            pod 'Braintree/DataCollector', '~> 6.36'
+          end
+
+          post_install do |installer|
+            installer.pods_project.targets.each do |t|
+              flutter_additional_ios_build_settings(t)
+              t.build_configurations.each do |c|
+                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+                c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+              end
+            end
+          end
+          PODFILE
+
+      - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
+        script: |
+          set -euo pipefail
+          ensure_include () {
+            local file="$1"; local include="$2"
+            touch "$file"
+            grep -F "$include" "$file" >/dev/null 2>&1 || echo "$include" | cat - "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+          }
+          # Inclui as xcconfigs dos Pods nos 3 modos (Debug/Profile/Release)
+          ensure_include ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
+          ensure_include ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
+          ensure_include ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+
+      - name: Pod install (clean, com checks robustos)
         script: |
           set -euo pipefail
           source $CM_ENV
@@ -47,9 +109,29 @@ workflows:
           rm -rf Pods Podfile.lock .symlinks
           pod repo update
           pod _1.16.2_ install
-          echo "== Verificando Flutter pod =="
-          test -d Pods/Flutter/Flutter.xcframework || { echo "FALHA: Pods/Flutter/Flutter.xcframework não existe"; exit 1; }
-          grep -R "Flutter.h" Pods -n || { echo "FALHA: 'Flutter.h' não encontrado em Pods"; exit 1; }
+
+          echo "== Tentando localizar Flutter.xcframework =="
+          FOUND=""
+          for p in \
+            "Pods/Flutter/Flutter.xcframework" \
+            "Flutter/Flutter.xcframework" \
+            ".symlinks/flutter/ios/Flutter.xcframework" \
+            ".symlinks/flutter/ios-release/Flutter.xcframework" \
+            ".symlinks/flutter/ios-profile/Flutter.xcframework"
+          do
+            if [ -d "$p" ] || [ -f "$p" ]; then
+              echo "Encontrado: $p"
+              FOUND="1"
+            fi
+          done
+
+          if [ -z "$FOUND" ]; then
+            echo "Não achei Flutter.xcframework em locais comuns. Procurando Flutter.h..."
+            if ! grep -R "Flutter.h" Pods -n && ! grep -R "Flutter.h" . -n ; then
+              echo "FALHA: 'Flutter.xcframework' e 'Flutter.h' não encontrados."
+              exit 1
+            fi
+          fi
           cd ..
 
       - name: Build iOS (release, no codesign)
