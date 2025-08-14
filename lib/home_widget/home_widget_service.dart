@@ -18,7 +18,8 @@ class QuickyHomeWidgetService {
     await HomeWidget.saveWidgetData<String>('saldo', (data['saldo'] ?? '').toString());
     await HomeWidget.saveWidgetData<String>('nexttask', (data['nexttask'] ?? '').toString());
     await HomeWidget.saveWidgetData<String>('rating', (data['rating'] ?? '').toString());
-
     await HomeWidget.updateWidget(name: _provider, iOSName: 'Quicky_Widget');
+    await HomeWidget.updateWidget(name: _provider, iOSName: 'Quicky_Widget');
+    await HomeWidget.updateWidget(name: _provider);
   }
 }
