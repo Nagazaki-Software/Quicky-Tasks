@@ -89,7 +89,8 @@ workflows:
       - name: Install CocoaPods
         script: |
           set -euo pipefail
-          gem list -i cocoapods || gem install cocoapods -N --user-install
+          # força versão mais estável com Flutter (evita incompatibilidades do 1.16.x)
+          gem list -i cocoapods -v 1.15.2 || gem install cocoapods -v 1.15.2 -N --user-install
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
           cd ios
