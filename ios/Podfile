@@ -9,15 +9,15 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# Lê FLUTTER_ROOT do Generated.xcconfig (padrão do template Flutter)
+# Lê FLUTTER_ROOT do Generated.xcconfig
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
   unless File.exist?(generated_xcode_build_settings_path)
     raise "Generated.xcconfig deve existir. Rode `flutter pub get` primeiro."
   end
   File.foreach(generated_xcode_build_settings_path) do |line|
-    matches = line.match(/FLUTTER_ROOT\=(.*)/)
-    return matches[1].strip if matches
+    m = line.match(/FLUTTER_ROOT\=(.*)/)
+    return m[1].strip if m
   end
   raise "FLUTTER_ROOT não encontrado em Generated.xcconfig"
 end
@@ -30,46 +30,52 @@ target 'Runner' do
   # Linkagem estática evita treta de linkagem e acelera o build
   use_frameworks! :linkage => :static
 
-  # Instala todos os pods do Flutter (plugins, etc.)
+  # Plugins do Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
+  # ===== Braintree via CocoaPods (NÃO via git) =====
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
+  # ================================================
 end
 
-# Se tiver outros targets (ex.: ImageNotification), mantenha-os aqui:
+# target extra? Descomente e ajuste:
 # target 'ImageNotification' do
 #   use_frameworks! :linkage => :static
 #   pod 'Firebase/Messaging'
 # end
 
 post_install do |installer|
-  # ⚙️ Adaptador: chama flutter_additional_ios_build_settings do jeito certo
+  # ⚙️ Chama o helper do Flutter APENAS se aceitar TARGET.
   if self.respond_to?(:flutter_additional_ios_build_settings)
-    arity = method(:flutter_additional_ios_build_settings).arity
-    case arity
-    when 1
-      # versões do Flutter que esperam TARGET
-      installer.pods_project.targets.each do |t|
-        flutter_additional_ios_build_settings(t)
+    begin
+      # Se arity == 1, helper aceita TARGET (é o cenário seguro)
+      if method(:flutter_additional_ios_build_settings).arity == 1
+        installer.pods_project.targets.each do |t|
+          flutter_additional_ios_build_settings(t)
+        end
+      else
+        # Caso contrário, NÃO CHAMAR (evita passar INSTALLER e quebrar com platform_name)
+        UI.puts "⚠️  pulando flutter_additional_ios_build_settings: assinatura não compatível"
       end
-    when 0
-      # raríssimo, mas coberto
-      flutter_additional_ios_build_settings
-    else
-      # versões que esperam INSTALLER
-      flutter_additional_ios_build_settings(installer)
+    rescue => e
+      UI.puts "⚠️  flutter_additional_ios_build_settings desabilitado: #{e.class}: #{e.message}"
     end
   end
 
-  # Garante iOS mínimo consistente e Swift 5.0 em todos os pods
+  # Nossos ajustes padrão
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
+      # Recomendações comuns do template do Flutter:
+      # Evita build quebrar em simulador Apple Silicon com libs antigas
+      excluded = config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]']
+      if excluded.nil? || excluded.empty?
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      end
     end
   end
 end
