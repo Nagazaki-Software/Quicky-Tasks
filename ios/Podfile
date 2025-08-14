@@ -1,6 +1,5 @@
-# Fonte oficial dos specs
+# Podfile gerado para Flutter + Braintree (CocoaPods)
 source 'https://cdn.cocoapods.org/'
-
 platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
@@ -10,65 +9,63 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# Descobre o FLUTTER_ROOT a partir do Generated.xcconfig
+# Lê FLUTTER_ROOT do Generated.xcconfig (padrão do template Flutter)
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
   unless File.exist?(generated_xcode_build_settings_path)
-    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+    raise "Generated.xcconfig deve existir. Rode `flutter pub get` primeiro."
   end
   File.foreach(generated_xcode_build_settings_path) do |line|
-    m = line.match(/FLUTTER_ROOT\=(.*)/)
-    return m[1].strip if m
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
   end
-  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}."
+  raise "FLUTTER_ROOT não encontrado em Generated.xcconfig"
 end
 
-# Helper do Flutter (.rb!)
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Linkagem estática reduz dor de cabeça com frameworks e velocidade de linkedição
+  # Linkagem estática evita treta de linkagem e acelera o build
   use_frameworks! :linkage => :static
 
-  # Plugins do Flutter
+  # Instala todos os pods do Flutter (plugins, etc.)
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # ===== Braintree via CocoaPods (NÃO via git) =====
+  # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
-  # ================================================
 end
 
-target 'ImageNotification' do
-  use_frameworks! :linkage => :static
-  pod 'Firebase/Messaging'
-end
+# (se tiver um target extra, como ImageNotification, mantém aqui)
+# target 'ImageNotification' do
+#   use_frameworks! :linkage => :static
+#   pod 'Firebase/Messaging'
+# end
 
 post_install do |installer|
-  # ⚙️ ADAPTADOR: chama flutter_additional_ios_build_settings do jeito que o teu Flutter espera
+  # ⚙️ Adaptador: algumas versões do Flutter esperam TARGET, outras INSTALLER
   if self.respond_to?(:flutter_additional_ios_build_settings)
-    # arity: -1 => aceita qualquer número de args; 1 => 1 arg; 0 => sem args (raríssimo)
-    ar = method(:flutter_additional_ios_build_settings).arity
-    case ar
+    arity = method(:flutter_additional_ios_build_settings).arity
+    case arity
     when 1
-      # Versões que esperam TARGET
+      # versões que esperam TARGET
       installer.pods_project.targets.each do |t|
         flutter_additional_ios_build_settings(t)
       end
     when 0
-      # Quase não aparece, mas deixo por segurança
+      # raríssimo, mas seguro
       flutter_additional_ios_build_settings
     else
-      # Versões antigas que esperam INSTALLER
+      # versões antigas que esperam INSTALLER
       flutter_additional_ios_build_settings(installer)
     end
   end
 
-  # Garante iOS mínimo e Swift coerentes em todos os pods
+  # Garante iOS mínimo consistente e Swift 5.0 em todos os pods
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
