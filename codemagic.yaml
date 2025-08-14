@@ -25,7 +25,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever Podfile (limpo, estável, com Braintree 6.x)
+           - name: Escrever Podfile (robusto)
         script: |
           set -euo pipefail
           cat > ios/Podfile <<'PODFILE'
@@ -54,37 +54,83 @@ workflows:
           end
 
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
-
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Braintree funciona bem com linkage estática; reduz conflitos e tempo de linkedição
+            # Linkagem estática = menos dor de cabeça de linkagem
             use_frameworks! :linkage => :static
 
-            # Instala todos os pods do Flutter (plugins, etc.)
+            # Plugins do Flutter
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # 👉 Braintree via CocoaPods (NÃO via :git). Use a linha 6.x
-            # Ajuste o "~> 6.36" se quiser fixar minor/patch diferente.
-            pod 'Braintree',                '~> 6.36'
-            pod 'Braintree/Card',           '~> 6.36'
-            pod 'Braintree/ThreeDSecure',   '~> 6.36'
-            pod 'Braintree/DataCollector',  '~> 6.36'
+            # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
+            pod 'Braintree',               '~> 6.36'
+            pod 'Braintree/Card',          '~> 6.36'
+            pod 'Braintree/ThreeDSecure',  '~> 6.36'
+            pod 'Braintree/DataCollector', '~> 6.36'
           end
 
+          # Se tiver targets extras, descomenta/ajusta:
+          # target 'ImageNotification' do
+          #   use_frameworks! :linkage => :static
+          #   pod 'Firebase/Messaging'
+          # end
+
+          # ===== Wrapper à prova de versões de Flutter/CocoaPods =====
+          def _call_flutter_build_settings_safely(installer)
+            return unless self.respond_to?(:flutter_additional_ios_build_settings)
+            begin
+              arity = method(:flutter_additional_ios_build_settings).arity
+            rescue
+              arity = -1
+            end
+
+            # 1) Preferir TARGET por ser o mais comum nas versões recentes
+            if arity == 1
+              installer.pods_project.targets.each do |t|
+                begin
+                  flutter_additional_ios_build_settings(t)
+                rescue NoMethodError, ArgumentError
+                  # ignora e tenta as outras variantes
+                end
+              end
+              return
+            end
+
+            # 2) Sem args (raro, mas vai que)
+            if arity == 0
+              begin
+                flutter_additional_ios_build_settings
+                return
+              rescue NoMethodError, ArgumentError
+              end
+            end
+
+            # 3) Installer (padrão antigo)
+            begin
+              flutter_additional_ios_build_settings(installer)
+            rescue NoMethodError, ArgumentError
+              # Último fallback: nada — não deixamos o hook quebrar.
+            end
+          end
+          # ===========================================================
+
           post_install do |installer|
-            flutter_additional_ios_build_settings(installer)
+            # Usa o wrapper seguro (NÃO chamamos mais direto o helper)
+            _call_flutter_build_settings_safely(installer)
+
+            # Garante iOS mínimo e Swift 5.0 em todos os pods
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                # Garante o iOS target coerente mesmo se algum pod for teimoso
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                config.build_settings['SWIFT_VERSION'] = '5.0'
               end
             end
           end
           PODFILE
 
           echo "== Podfile final =="
-          cat ios/Podfile
+          nl -ba ios/Podfile | sed -n '1,120p'
 
       - name: Install CocoaPods
         script: |
