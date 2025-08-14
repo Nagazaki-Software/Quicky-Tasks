@@ -21,28 +21,43 @@ workflows:
           flutter clean && flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Patch Podfile (use_frameworks! + Braintree via Git)
+      - name: Patch Podfile (use_frameworks! + Braintree via Git main)
         script: |
           set -euo pipefail
           PODFILE="ios/Podfile"
-          BR_TAG="5.32.1"   # <<< ajuste aqui se quiser outro ref
+          BR_REF="main" # ou fixe por SHA
+
+          # Fonte + plataforma
           grep -q "^source 'https://cdn.cocoapods.org/'" "$PODFILE" || sed -i.bak "1isource 'https://cdn.cocoapods.org/'" "$PODFILE"
-          if grep -q "^platform :ios" "$PODFILE"; then sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"; else awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"; fi
-          awk '/target[[:space:]]+'\''Runner'\''[[:space:]]+do/{print;print "  use_frameworks!";next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+          if grep -q "^platform :ios" "$PODFILE"; then
+            sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"
+          else
+            awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+          fi
+
+          # use_frameworks! dentro do target Runner (idempotente no CI)
+          awk '
+            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
+            {print}
+          ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+
+          # Remove pods Braintree antigos e injeta módulos via Git (branch main)
           sed -i.bak "/pod 'Braintree[^\']*'/d" "$PODFILE"
-          awk -v tag="$BR_TAG" '
+          awk -v ref="$BR_REF" '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
             inrunner && /flutter_install_all_ios_pods/ && !printed {
-              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
+              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
+              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
+              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
               printed=1
-            } {print}
+            }
+            {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+
           echo "== Podfile final ==" && cat "$PODFILE"
 
-      - name: Instalar CocoaPods e atualizar repos
+      - name: Install CocoaPods
         script: |
           set -euo pipefail
           gem list -i cocoapods || gem install cocoapods -N --user-install
