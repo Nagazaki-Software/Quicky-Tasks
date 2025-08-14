@@ -1,6 +1,6 @@
 # Podfile gerado para Flutter + Braintree (CocoaPods) sem use_frameworks!
 source 'https://cdn.cocoapods.org/'
-platform :ios, '15.0'
+platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -97,7 +97,7 @@ post_install do |installer|
   # Ajustes globais de build (inclui headers do Flutter nos search paths)
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
       # Header search paths para módulos que incluem <Flutter/Flutter.h>
       existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
