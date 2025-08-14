@@ -1,74 +1,42 @@
-workflows:
-  ios-release:
-    name: iOS Release (no codesign)
-    environment:
-      flutter: stable
-      xcode: latest
-    # ⚠️ Temporariamente desabilite cache de Pods
-    cache:
-      cache_paths:
-        - ~/.pub-cache
-        # Remova Pods/Podfile.lock do cache até estabilizar o build
-        # - ios/Pods
-        # - ios/Podfile.lock
-        - ~/Library/Caches/CocoaPods
+source 'https://cdn.cocoapods.org/'
+platform :ios, '14.0'
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-    scripts:
-      - name: Versions
-        script: |
-          set -euo pipefail
-          flutter --version && xcodebuild -version
-          ruby -v || true; pod --version || true
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
 
-      - name: Install CocoaPods 1.16.2 (persist PATH)
-        script: |
-          set -euo pipefail
-          gem uninstall cocoapods -aIx || true
-          gem install cocoapods -v 1.16.2 -N --user-install
-          # Persistir PATH para TODOS os próximos passos
-          echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
-          echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-          source $CM_ENV
-          pod --version
+def flutter_root
+  generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+  File.foreach(generated_xcconfig) do |line|
+    m = line.match(/FLUTTER_ROOT\=(.*)/)
+    return m[1].strip if m
+  end
+  raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+end
 
-      - name: Flutter clean & pub get
-        script: |
-          set -euo pipefail
-          flutter clean
-          flutter pub get
-          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
+require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+flutter_ios_podfile_setup
 
-      - name: Pod install (clean, com sanity checks)
-        script: |
-          set -euo pipefail
-          source $CM_ENV
+target 'Runner' do
+  # Sem use_frameworks!, sem use_modular_headers!
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-          # Limpeza real
-          cd ios
-          rm -rf Pods Podfile.lock .symlinks
-          pod repo update
+  # Braintree 6.x
+  pod 'Braintree',               '~> 6.36'
+  pod 'Braintree/Card',          '~> 6.36'
+  pod 'Braintree/ThreeDSecure',  '~> 6.36'
+  pod 'Braintree/DataCollector', '~> 6.36'
+end
 
-          # Use explicitamente a versão instalada (evita 'pod' antigo no PATH do sistema)
-          pod _1.16.2_ install
-
-          echo "== Verificando Flutter pod =="
-          test -d Pods/Flutter/Flutter.xcframework || { echo "FALHA: Pods/Flutter/Flutter.xcframework não existe"; exit 1; }
-          # Alguns setups não geram um diretório 'Flutter' direto em Headers/Public;
-          # mas o header deve existir em algum lugar:
-          grep -R "Flutter.h" Pods -n || { echo "FALHA: 'Flutter.h' não encontrado nos Pods"; exit 1; }
-
-          cd ..
-
-      - name: Build iOS (release, no codesign) usando o mesmo PATH
-        script: |
-          set -euo pipefail
-          source $CM_ENV
-          flutter pub get
-          # Forçar novamente a versão do pod se o build invocar 'pod' por baixo dos panos
-          which pod && pod --version
-          flutter build ios --release --no-codesign
-
-    artifacts:
-      - build/ios/iphoneos/*.ipa
-      - build/ios/ipa/*.ipa
-      - build/ios/**/*.xcarchive
+post_install do |installer|
+  installer.pods_project.targets.each do |t|
+    flutter_additional_ios_build_settings(t)
+    t.build_configurations.each do |c|
+      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
+  end
+end
