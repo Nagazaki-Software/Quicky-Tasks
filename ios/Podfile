@@ -22,12 +22,30 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
+  # ✅ SEM use_frameworks!, SEM use_modular_headers! global
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
+  # Braintree 6.x
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
+
+  # 🔒 Somente estes com module maps
+  pod 'SDWebImage', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'GoogleDataTransport', :modular_headers => true
+  pod 'nanopb', :modular_headers => true
+
+  # Interops / core que o Firebase cita (nem sempre todos são necessários, mas segura a bronca):
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'FirebaseCoreExtension', :modular_headers => true
+  pod 'FirebaseAuthInterop', :modular_headers => true
+  pod 'FirebaseAppCheckInterop', :modular_headers => true
+  pod 'FirebaseMessagingInterop', :modular_headers => true
+  pod 'RecaptchaInterop', :modular_headers => true
 end
 
 post_install do |installer|
