@@ -22,10 +22,10 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   # Braintree via CDN (umbrella + subspecs)
-  pod 'Braintree', '~> 5.32'
-  pod 'Braintree/Card'
-  pod 'Braintree/ThreeDSecure'
-  pod 'Braintree/DataCollector'
+pod 'Braintree'             
+pod 'Braintree/Card'
+pod 'Braintree/ThreeDSecure'
+pod 'Braintree/DataCollector'
 end
 
 target 'ImageNotification' do
