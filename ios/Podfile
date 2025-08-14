@@ -23,41 +23,37 @@ def flutter_root
   raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}."
 end
 
-# Helper do Flutter (use a versão com .rb)
+# Helper do Flutter (use a versão .rb)
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Braintree e cia funcionam bem com linkage estática (menos treta de linkagem)
+  # Linkagem estática reduz dor de cabeça com frameworks
   use_frameworks! :linkage => :static
 
   # Plugins do Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   # ===== Braintree via CocoaPods (NÃO via git) =====
-  # Umbrella + subspecs corretos para CocoaPods (equivalentes aos módulos SPM)
-  # Ajuste a faixa se quiser; 6.36 atende os requisitos atuais do SDK
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
   # ================================================
-
 end
 
 target 'ImageNotification' do
-  # Frameworks estáticos aqui também para consistência
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
 end
 
 post_install do |installer|
-  # Ajustes padrão do Flutter (usa o objeto installer)
-  flutter_additional_ios_build_settings(installer)
-
-  # Garante target mínimo e Swift coerentes em todos os pods
+  # 👉 TUA VERSÃO DO podhelper ESPERA TARGET, NÃO INSTALLER
   installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    # Garante iOS mínimo e Swift coerentes em todos os pods
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.0'
