@@ -34,7 +34,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # 🔑 Ativa module maps para pods sem módulos (ex.: GoogleUtilities, SDWebImage, etc.)
+          # 🔑 Gera module maps para pods sem módulos (GoogleUtilities, SDWebImage, etc.)
           use_modular_headers!
 
           project 'Runner', {
@@ -69,21 +69,21 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # ⚠️ SEM use_frameworks!: libs estáticas funcionam melhor com plugins Flutter
+            # ⚠️ SEM use_frameworks!: plugins Flutter preferem libs estáticas
 
-            # Garante o Pod 'Flutter' presente (força a integração do engine/headers)
+            # Garante o pod Flutter presente (engine/headers)
             pod 'Flutter', :path => 'Flutter'
 
             # Plugins do Flutter
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree 6.x via CocoaPods (não via git)
+            # Braintree 6.x via CocoaPods
             pod 'Braintree',               '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
 
-            # (Opcional) Se algum pod específico insistir, modularize pontualmente:
+            # (Opcional) modularização pontual se algo reclamar:
             # pod 'SDWebImage', :modular_headers => true
           end
 
@@ -119,8 +119,25 @@ workflows:
           # =============================================================
 
           post_install do |installer|
+            require 'fileutils'
+
             # Usa o wrapper (não chama o helper direto)
             _call_flutter_build_settings_safely(installer)
+
+            # 🔧 Symlink de Flutter.h em Headers/Public/Flutter/Flutter.h
+            # (é onde os plugins fazem #include <Flutter/Flutter.h>)
+            flutter_headers_candidates = Dir.glob([
+              File.join(installer.sandbox.root.to_s, 'Flutter', 'Flutter.framework', 'Headers'),
+              File.join(installer.sandbox.root.to_s, 'Flutter', 'Flutter.xcframework', '**', 'Headers')
+            ])
+            flutter_headers_dir = flutter_headers_candidates.find { |p| File.directory?(p) }
+            if flutter_headers_dir
+              public_flutter_dir = File.join(installer.sandbox.public_headers.root.to_s, 'Flutter')
+              FileUtils.mkdir_p(public_flutter_dir)
+              src = File.join(flutter_headers_dir, 'Flutter.h')
+              dst = File.join(public_flutter_dir, 'Flutter.h')
+              FileUtils.ln_sf(src, dst) if File.exist?(src)
+            end
 
             # Garante iOS mínimo, Swift 5 e caminhos de headers/frameworks do Flutter
             installer.pods_project.targets.each do |target|
@@ -132,11 +149,14 @@ workflows:
                 existing_h = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
                 extra_h = [
                   '$(PODS_ROOT)/Headers/Public',
-                  '$(PODS_ROOT)/Headers/Public/Flutter'
+                  '$(PODS_ROOT)/Headers/Public/Flutter',
+                  '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
+                  '$(PODS_ROOT)/Flutter/Flutter.xcframework/**/Headers',
+                  '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers'
                 ]
                 config.build_settings['HEADER_SEARCH_PATHS'] = Array(existing_h) + extra_h
 
-                # Frameworks (para <Flutter/Flutter.h> via framework-style include)
+                # Frameworks (para localizar Flutter.framework/xcframework)
                 existing_f = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || '$(inherited)'
                 extra_f = [
                   '$(PODS_ROOT)/Flutter',
@@ -151,8 +171,8 @@ workflows:
           end
           PODFILE
 
-          echo "== Podfile final (1..240) =="
-          nl -ba ios/Podfile | sed -n '1,240p'
+          echo "== Podfile final (1..260) =="
+          nl -ba ios/Podfile | sed -n '1,260p'
 
       - name: Install CocoaPods
         script: |
@@ -162,7 +182,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig ainda não existe!"; exit 1)
 
-          # CocoaPods estável (1.15.2). O warning do Flutter sobre 1.16.x pode ser ignorado.
+          # CocoaPods estável (1.15.2)
           gem uninstall cocoapods -aIx || true
           gem install cocoapods -v 1.15.2 -N --user-install
 
