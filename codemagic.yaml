@@ -1,13 +1,16 @@
 workflows:
   ios-release:
     name: iOS Release (no codesign)
-    environment: { flutter: stable, xcode: latest }
+    environment:
+      flutter: stable
+      xcode: latest
     cache:
       cache_paths:
         - ~/.pub-cache
         - ios/Pods
         - ios/Podfile.lock
         - ~/Library/Caches/CocoaPods
+
     scripts:
       - name: Versions
         script: |
@@ -18,53 +21,80 @@ workflows:
       - name: Flutter clean & pub get
         script: |
           set -euo pipefail
-          flutter clean && flutter pub get
+          flutter clean
+          flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Patch Podfile (use_frameworks! + Braintree via Git tag)
+      - name: Escrever Podfile (limpo, estável, com Braintree 6.x)
         script: |
           set -euo pipefail
-          PODFILE="ios/Podfile"
-          BR_TAG="v5.31.0"
+          cat > ios/Podfile <<'PODFILE'
+          # Podfile gerado para Flutter + Braintree (CocoaPods)
+          source 'https://cdn.cocoapods.org/'
+          platform :ios, '15.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Fonte + plataforma
-          grep -q "^source 'https://cdn.cocoapods.org/'" "$PODFILE" || sed -i.bak "1isource 'https://cdn.cocoapods.org/'" "$PODFILE"
-          if grep -q "^platform :ios" "$PODFILE"; then
-            sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"
-          else
-            awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-          fi
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
 
-          # use_frameworks! dentro do Runner
-          awk '
-            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
-            {print}
-          ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+          # Lê FLUTTER_ROOT do Generated.xcconfig (padrão do template Flutter)
+          def flutter_root
+            generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            unless File.exist?(generated_xcode_build_settings_path)
+              raise "Generated.xcconfig deve existir. Rode `flutter pub get` primeiro."
+            end
+            File.foreach(generated_xcode_build_settings_path) do |line|
+              matches = line.match(/FLUTTER_ROOT\=(.*)/)
+              return matches[1].strip if matches
+            end
+            raise "FLUTTER_ROOT não encontrado em Generated.xcconfig"
+          end
 
-          # Remove qualquer Braintree antigo (inclui umbrella)
-          sed -i.bak "/pod 'Braintree[^']*'/d" "$PODFILE"
+          require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
-          # Injeta subspecs via Git (tag com prefixo 'v')
-          awk -v tag="$BR_TAG" '
-            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
-            inrunner && /flutter_install_all_ios_pods/ && !printed {
-              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
-              printed=1
-            } {print}
-          ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+          flutter_ios_podfile_setup
 
-          echo "== Podfile final ==" && cat "$PODFILE"
+          target 'Runner' do
+            # Braintree funciona bem com linkage estática; reduz conflitos e tempo de linkedição
+            use_frameworks! :linkage => :static
+
+            # Instala todos os pods do Flutter (plugins, etc.)
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+            # 👉 Braintree via CocoaPods (NÃO via :git). Use a linha 6.x
+            # Ajuste o "~> 6.36" se quiser fixar minor/patch diferente.
+            pod 'Braintree',                '~> 6.36'
+            pod 'Braintree/Card',           '~> 6.36'
+            pod 'Braintree/ThreeDSecure',   '~> 6.36'
+            pod 'Braintree/DataCollector',  '~> 6.36'
+          end
+
+          post_install do |installer|
+            flutter_additional_ios_build_settings(installer)
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                # Garante o iOS target coerente mesmo se algum pod for teimoso
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+              end
+            end
+          end
+          PODFILE
+
+          echo "== Podfile final =="
+          cat ios/Podfile
 
       - name: Install CocoaPods
         script: |
           set -euo pipefail
           gem list -i cocoapods || gem install cocoapods -N --user-install
-          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"; export PATH="$GEM_BIN:$PATH"
+          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
+          export PATH="$GEM_BIN:$PATH"
           cd ios
-          rm -f Podfile.lock && rm -rf Pods
+          rm -f Podfile.lock
+          rm -rf Pods
           pod repo update
           pod install --repo-update || (echo "retry pod install..." && sleep 5 && pod install --repo-update)
           cd ..
