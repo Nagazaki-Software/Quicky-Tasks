@@ -21,11 +21,10 @@ workflows:
           flutter clean && flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Patch Podfile (use_frameworks! + Braintree via Git main)
+      - name: Patch Podfile (use_frameworks! + Braintree subspecs)
         script: |
           set -euo pipefail
           PODFILE="ios/Podfile"
-          BR_REF="main" # ou fixe por SHA
 
           # Fonte + plataforma
           grep -q "^source 'https://cdn.cocoapods.org/'" "$PODFILE" || sed -i.bak "1isource 'https://cdn.cocoapods.org/'" "$PODFILE"
@@ -35,21 +34,21 @@ workflows:
             awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
           fi
 
-          # use_frameworks! dentro do target Runner (idempotente no CI)
+          # use_frameworks! no target Runner (idempotente)
           awk '
-            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
+            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; printedUF=1; print "  use_frameworks!"; next}
             {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
 
-          # Remove pods Braintree antigos e injeta módulos via Git (branch main)
-          sed -i.bak "/pod 'Braintree[^\']*'/d" "$PODFILE"
-          awk -v ref="$BR_REF" '
+          # Remove linhas antigas do Braintree e injeta umbrella + subspecs
+          sed -i.bak "/pod 'Braintree[^']*'/d" "$PODFILE"
+          awk '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
             inrunner && /flutter_install_all_ios_pods/ && !printed {
-              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
-              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
-              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
-              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :branch => '\''" ref "'\''"
+              print "  pod '\''Braintree'\'', '\''~> 5.32'\''"
+              print "  pod '\''Braintree/Card'\''"
+              print "  pod '\''Braintree/ThreeDSecure'\''"
+              print "  pod '\''Braintree/DataCollector'\''"
               printed=1
             }
             {print}
