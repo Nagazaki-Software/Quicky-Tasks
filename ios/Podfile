@@ -1,47 +1,62 @@
-# Podfile simples e compatível com Flutter (iOS 14)
-source 'https://cdn.cocoapods.org/'
-platform :ios, '14.0'
-ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+workflows:
+  ios-release:
+    name: iOS Release (no codesign)
+    environment:
+      flutter: stable
+      xcode: latest
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ios/Pods
+        - ios/Podfile.lock
+        - ~/Library/Caches/CocoaPods
 
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
+    scripts:
+      - name: Versions
+        script: |
+          set -euo pipefail
+          flutter --version && xcodebuild -version
+          ruby -v || true; pod --version || true
 
-# Descobre FLUTTER_ROOT a partir do Generated.xcconfig
-def flutter_root
-  generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-  raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
-  File.foreach(generated_xcconfig) do |line|
-    m = line.match(/FLUTTER_ROOT\=(.*)/)
-    return m[1].strip if m
-  end
-  raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
-end
+      - name: Install CocoaPods 1.16.2
+        script: |
+          set -euo pipefail
+          gem uninstall cocoapods -aIx || true
+          gem install cocoapods -v 1.16.2 -N --user-install
+          echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
+          echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
+          source $CM_ENV
+          pod --version
 
-require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
-flutter_ios_podfile_setup
+      - name: Flutter clean & pub get
+        script: |
+          set -euo pipefail
+          flutter clean
+          flutter pub get
+          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-target 'Runner' do
-  # Nada de use_frameworks! / use_modular_headers!
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+      - name: Pod install (clean)
+        script: |
+          set -euo pipefail
+          source $CM_ENV
+          cd ios
+          rm -rf Pods Podfile.lock .symlinks
+          pod repo update
+          pod install
+          echo "== Verificando Flutter pod =="
+          ls -la Pods/Flutter || true
+          find Pods/Flutter -maxdepth 4 -print | sed -n '1,120p' || true
+          grep -R "Flutter.h" Pods -n || true
+          cd ..
 
-  # Braintree 6.x
-  pod 'Braintree',               '~> 6.36'
-  pod 'Braintree/Card',          '~> 6.36'
-  pod 'Braintree/ThreeDSecure',  '~> 6.36'
-  pod 'Braintree/DataCollector', '~> 6.36'
-end
+      - name: Build iOS (release, no codesign)
+        script: |
+          set -euo pipefail
+          source $CM_ENV
+          flutter pub get
+          flutter build ios --release --no-codesign
 
-post_install do |installer|
-  # Chamando o helper oficial target-a-target
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      # Opcional: só se precisar forçar
-      # config.build_settings['SWIFT_VERSION'] = '5.0'
-    end
-  end
-end
+    artifacts:
+      - build/ios/iphoneos/*.ipa
+      - build/ios/ipa/*.ipa
+      - build/ios/**/*.xcarchive
