@@ -25,11 +25,11 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever Podfile (robusto)
+      - name: Escrever Podfile (robusto, sem use_frameworks!)
         script: |
           set -euo pipefail
           cat > ios/Podfile <<'PODFILE'
-          # Podfile gerado para Flutter + Braintree (CocoaPods)
+          # Podfile gerado para Flutter + Braintree (CocoaPods) — SEM use_frameworks!
           source 'https://cdn.cocoapods.org/'
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -73,10 +73,7 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Linkagem estática = menos dor de cabeça de linkagem
-            use_frameworks! :linkage => :static
-
-            # Plugins do Flutter
+            # ⚠️ Sem use_frameworks!: plugins Flutter funcionam melhor como libs estáticas
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
@@ -126,17 +123,24 @@ workflows:
             # Usa o wrapper seguro (NÃO chamar o helper direto)
             _call_flutter_build_settings_safely(installer)
 
-            # Garante iOS mínimo e Swift 5.0 em todos os pods
+            # Garante iOS mínimo, Swift 5 e headers do Flutter nos search paths
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                 config.build_settings['SWIFT_VERSION'] = '5.0'
+                existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+                extra = [
+                  '$(PODS_ROOT)/Headers/Public',
+                  '$(PODS_ROOT)/Headers/Public/Flutter'
+                ]
+                config.build_settings['HEADER_SEARCH_PATHS'] = Array(existing) + extra
+                config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
               end
             end
           end
           PODFILE
 
-          echo "== Podfile final =="
+          echo "== Podfile final (primeiras 160 linhas) =="
           nl -ba ios/Podfile | sed -n '1,160p'
 
       - name: Install CocoaPods
@@ -164,6 +168,9 @@ workflows:
           pod _1.15.2_ repo update
           pod _1.15.2_ deintegrate || true
           pod _1.15.2_ install --repo-update
+
+          # debug opcional: confirma se o header do Flutter existe no Pods
+          (grep -R "Flutter.h" Pods -n || true)
           cd ..
 
       - name: Build iOS (release, no codesign)
