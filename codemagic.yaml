@@ -136,25 +136,29 @@ workflows:
         script: |
           set -euo pipefail
 
-          # Limpa qualquer versão existente e instala 1.15.2
+          # (1) Garante que o Generated.xcconfig exista antes do pod install
+          flutter pub get
+          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig ainda não existe!"; exit 1)
+
+          # (2) Fixar CocoaPods estável e chamar explicitamente essa versão
           gem uninstall cocoapods -aIx || true
           gem install cocoapods -v 1.15.2 -N --user-install
 
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
 
-          echo "CocoaPods version:"
+          echo "CocoaPods version (esperado 1.15.2):"
           pod --version
 
           cd ios
           rm -f Podfile.lock
           rm -rf Pods
 
-          # Invocação VERSIONADA garante que é a 1.15.2, mesmo se outra estiver no PATH
           pod _1.15.2_ repo update
           pod _1.15.2_ deintegrate || true
           pod _1.15.2_ install --repo-update
           cd ..
+
 
 
       - name: Build iOS (release, no codesign)
