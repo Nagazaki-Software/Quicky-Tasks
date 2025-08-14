@@ -40,27 +40,27 @@ target 'Runner' do
   pod 'Braintree/DataCollector', '~> 6.36'
 end
 
-# (se tiver um target extra, como ImageNotification, mantém aqui)
+# Se tiver outros targets (ex.: ImageNotification), mantenha-os aqui:
 # target 'ImageNotification' do
 #   use_frameworks! :linkage => :static
 #   pod 'Firebase/Messaging'
 # end
 
 post_install do |installer|
-  # ⚙️ Adaptador: algumas versões do Flutter esperam TARGET, outras INSTALLER
+  # ⚙️ Adaptador: chama flutter_additional_ios_build_settings do jeito certo
   if self.respond_to?(:flutter_additional_ios_build_settings)
     arity = method(:flutter_additional_ios_build_settings).arity
     case arity
     when 1
-      # versões que esperam TARGET
+      # versões do Flutter que esperam TARGET
       installer.pods_project.targets.each do |t|
         flutter_additional_ios_build_settings(t)
       end
     when 0
-      # raríssimo, mas seguro
+      # raríssimo, mas coberto
       flutter_additional_ios_build_settings
     else
-      # versões antigas que esperam INSTALLER
+      # versões que esperam INSTALLER
       flutter_additional_ios_build_settings(installer)
     end
   end
