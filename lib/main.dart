@@ -11,6 +11,7 @@ import 'backend/push_notifications/push_notifications_util.dart';
 import 'backend/firebase/firebase_config.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'flutter_flow/internationalization.dart';
+import 'home_widget/home_widget_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,6 +84,7 @@ class _MyAppState extends State<MyApp> {
     userStream = quickyFirebaseUserStream()
       ..listen((user) {
         _appStateNotifier.update(user);
+        QuickyHomeWidgetService.update();
       });
     jwtTokenStream.listen((_) {});
     Future.delayed(
