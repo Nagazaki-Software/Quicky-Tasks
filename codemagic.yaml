@@ -25,14 +25,17 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever Podfile (robusto, sem use_frameworks!)
+      - name: Escrever Podfile (robusto, SEM use_frameworks!, COM use_modular_headers!)
         script: |
           set -euo pipefail
           cat > ios/Podfile <<'PODFILE'
-          # Podfile gerado para Flutter + Braintree (CocoaPods) — SEM use_frameworks!
+          # Podfile para Flutter + Braintree (CocoaPods)
           source 'https://cdn.cocoapods.org/'
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+          # 🔑 Ativa module maps para pods sem módulos (ex.: GoogleUtilities, SDWebImage, etc.)
+          use_modular_headers!
 
           project 'Runner', {
             'Debug' => :debug,
@@ -40,24 +43,18 @@ workflows:
             'Release' => :release,
           }
 
-          # Descobre o FLUTTER_ROOT de forma robusta:
-          # 1) Lê do ios/Flutter/Generated.xcconfig
-          # 2) Tenta ENV['FLUTTER_ROOT']
-          # 3) Se faltar, roda flutter pub get e tenta de novo
+          # Descobre o FLUTTER_ROOT de forma robusta
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-
             if File.exist?(generated_xcconfig)
               File.foreach(generated_xcconfig) do |line|
                 m = line.match(/FLUTTER_ROOT\=(.*)/)
                 return m[1].strip if m
               end
             end
-
             if ENV['FLUTTER_ROOT'] && !ENV['FLUTTER_ROOT'].empty? && File.directory?(ENV['FLUTTER_ROOT'])
               return ENV['FLUTTER_ROOT']
             end
-
             system('bash', '-lc', 'cd .. && flutter pub get 1>/dev/null 2>&1')
             if File.exist?(generated_xcconfig)
               File.foreach(generated_xcconfig) do |line|
@@ -65,7 +62,6 @@ workflows:
                 return m[1].strip if m
               end
             end
-
             raise "Generated.xcconfig não encontrado e ENV['FLUTTER_ROOT'] não definida. Rode `flutter pub get` na raiz do projeto."
           end
 
@@ -73,26 +69,27 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # ⚠️ Sem use_frameworks!: plugins Flutter funcionam melhor como libs estáticas
+            # ⚠️ Sem use_frameworks!: libs estáticas funcionam melhor com plugins Flutter
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # 👉 Braintree via CocoaPods (NÃO via :git). Linha 6.x
+            # Braintree 6.x via CocoaPods (não via git)
             pod 'Braintree',               '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
+
+            # (Opcional) Se algum pod específico insistir, pode modularizar pontualmente:
+            # pod 'SDWebImage', :modular_headers => true
           end
 
-          # ===== Wrapper à prova de versões de Flutter/CocoaPods =====
+          # ===== Wrapper seguro para diferenças do helper do Flutter =====
           def _call_flutter_build_settings_safely(installer)
             return unless self.respond_to?(:flutter_additional_ios_build_settings)
             arity = -1
             begin
               arity = method(:flutter_additional_ios_build_settings).arity
             rescue
-              # mantém -1
             end
-
             if arity == 1
               installer.pods_project.targets.each do |t|
                 begin
@@ -102,7 +99,6 @@ workflows:
               end
               return
             end
-
             if arity == 0
               begin
                 flutter_additional_ios_build_settings
@@ -110,17 +106,15 @@ workflows:
               rescue NoMethodError, ArgumentError
               end
             end
-
             begin
               flutter_additional_ios_build_settings(installer)
             rescue NoMethodError, ArgumentError
-              # não deixa o hook quebrar
             end
           end
-          # ===========================================================
+          # =============================================================
 
           post_install do |installer|
-            # Usa o wrapper seguro (NÃO chamar o helper direto)
+            # Usa o wrapper (não chama o helper direto)
             _call_flutter_build_settings_safely(installer)
 
             # Garante iOS mínimo, Swift 5 e headers do Flutter nos search paths
@@ -140,53 +134,43 @@ workflows:
           end
           PODFILE
 
-          echo "== Podfile final (primeiras 160 linhas) =="
-          nl -ba ios/Podfile | sed -n '1,160p'
+          echo "== Podfile final (1..200) =="
+          nl -ba ios/Podfile | sed -n '1,200p'
 
       - name: Install CocoaPods
         script: |
           set -euo pipefail
 
-          # (1) Garante que o Generated.xcconfig exista antes do pod install
+          # Garante o Generated.xcconfig
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig ainda não existe!"; exit 1)
 
-          # (2) Fixar CocoaPods estável e chamar explicitamente essa versão
+          # CocoaPods estável (1.15.2). O warning do Flutter sobre 1.16.x pode ser ignorado.
           gem uninstall cocoapods -aIx || true
           gem install cocoapods -v 1.15.2 -N --user-install
 
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
 
-          echo "CocoaPods version (esperado 1.15.2):"
+          echo "CocoaPods version:"
           pod --version
 
           cd ios
           rm -f Podfile.lock
           rm -rf Pods
-
           pod _1.15.2_ repo update
           pod _1.15.2_ deintegrate || true
           pod _1.15.2_ install --repo-update
-
-          # debug opcional: confirma se o header do Flutter existe no Pods
-          (grep -R "Flutter.h" Pods -n || true)
+          # debug opcional
+          (grep -R "module.modulemap" Pods/ -n | head || true)
           cd ..
 
       - name: Build iOS (release, no codesign)
         script: |
           set -euo pipefail
-          # 🔑 Reexporta o GEM_BIN neste passo também (ambiente novo)
           export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
           export PATH="$GEM_BIN:$PATH"
-          echo "CocoaPods em PATH durante o build:"
-          which pod || true
-          pod --version || true
-
-          # Só por garantia, deps Flutter ok
           flutter pub get
-
-          # Build
           flutter build ios --release --no-codesign
 
     artifacts:
