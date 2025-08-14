@@ -27,32 +27,24 @@ flutter_ios_podfile_setup
 
 # ===== App principal =====
 target 'Runner' do
-  # Gera módulos Swift sem modular headers globais
+  # Precisamos de módulos Swift — frameworks estáticos funcionam muito bem aqui
   use_frameworks! :linkage => :static
 
-  # Plugins do Flutter (inclui FirebaseMessaging via plugin flutterfire)
+  # Plugins do Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Seus pods extras
-  pod 'Braintree',               '~> 6.36'
-  pod 'Braintree/Card',          '~> 6.36'
-  pod 'Braintree/ThreeDSecure',  '~> 6.36'
-  pod 'Braintree/DataCollector', '~> 6.36'
+  # ✅ Braintree 6.x (módulos corretos — troquei o umbrella e os "com barra")
+  pod 'BraintreeCore',         '~> 6.36'
+  pod 'BraintreeCard',         '~> 6.36'
+  pod 'BraintreeThreeDSecure', '~> 6.36'
+  pod 'BraintreeDataCollector','~> 6.36'
 end
 
-# ===== Extensão de Notificação com imagem =====
-# Ajuste o nome do target abaixo se for diferente em seu projeto Xcode
+# ===== Extensão de notificação com imagem (ajuste o nome se diferente) =====
 target 'ImageNotification' do
-  # Herdar search paths do alvo pai (inclui coisas do Flutter quando necessário)
   inherit! :search_paths
-
-  # Módulos Swift como frameworks estáticos (necessário p/ Firebase* em extensão)
   use_frameworks! :linkage => :static
-
-  # Dependências específicas da extensão
   pod 'Firebase/Messaging'
-  # Se você manipula mídia/imagem na extensão e usa SDWebImage, ative:
-  # pod 'SDWebImage'
 end
 
 post_install do |installer|
@@ -60,7 +52,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(t)
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      # Deixe o CocoaPods gerenciar libs Swift
+      # Deixe o CocoaPods cuidar das Swift libs
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
