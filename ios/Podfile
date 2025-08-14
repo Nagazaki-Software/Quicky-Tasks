@@ -22,10 +22,8 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Sem use_frameworks!, sem use_modular_headers!
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree 6.x
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
