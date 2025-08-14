@@ -88,18 +88,37 @@ workflows:
           end
           PODFILE
 
-      - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
+            - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
         script: |
           set -euo pipefail
-          ensure_include () {
-            local file="$1"; local include="$2"
-            touch "$file"
-            grep -F "$include" "$file" >/dev/null 2>&1 || echo "$include" | cat - "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+
+          # Garante a pasta e os arquivos base
+          mkdir -p ios/Flutter
+          for mode in Debug Profile Release; do
+            f="ios/Flutter/${mode}.xcconfig"
+            test -f "$f" || touch "$f"
+          done
+
+          # Função segura para PREPENDER uma linha se ainda não existir
+          prepend_once () {
+            local file="$1"; local line="$2"
+            if ! grep -Fq "$line" "$file"; then
+              tmp="$(mktemp)"
+              { echo "$line"; cat "$file"; } > "$tmp"
+              mv "$tmp" "$file"
+            fi
           }
-          # Inclui as xcconfigs dos Pods nos 3 modos (Debug/Profile/Release)
-          ensure_include ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
-          ensure_include ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
-          ensure_include ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+
+          prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
+          prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
+          prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+
+          echo "== Primeiras linhas após patch =="
+          for f in ios/Flutter/*.xcconfig; do
+            echo "---- $f ----"
+            sed -n '1,3p' "$f" || true
+          done
+
 
       - name: Pod install (clean, com checks robustos)
         script: |
