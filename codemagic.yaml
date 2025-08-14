@@ -161,9 +161,20 @@ workflows:
 
 
 
-      - name: Build iOS (release, no codesign)
+       - name: Build iOS (release, no codesign)
         script: |
           set -euo pipefail
+          # 🔑 PASSO CRÍTICO: reexporta o GEM_BIN neste passo também!
+          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
+          export PATH="$GEM_BIN:$PATH"
+          echo "CocoaPods em PATH durante o build:"
+          which pod || true
+          pod --version || true
+
+          # Só por garantia, deps Flutter ok
+          flutter pub get
+
+          # Build
           flutter build ios --release --no-codesign
 
     artifacts:
