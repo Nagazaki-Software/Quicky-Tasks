@@ -31,7 +31,7 @@ workflows:
           cat > ios/Podfile <<'PODFILE'
           # Podfile para Flutter + Braintree (CocoaPods)
           source 'https://cdn.cocoapods.org/'
-          platform :ios, '15.0'
+          platform :ios, '14.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
           # 🔑 Gera module maps para pods sem módulos (GoogleUtilities, SDWebImage, etc.)
@@ -142,7 +142,7 @@ workflows:
             # Garante iOS mínimo, Swift 5 e caminhos de headers/frameworks do Flutter
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
                 config.build_settings['SWIFT_VERSION'] = '5.0'
 
                 # Headers (para includes <>)
