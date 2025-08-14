@@ -21,50 +21,41 @@ workflows:
           flutter clean && flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Patch braintree_native_ui.podspec (pub-cache)
-        script: |
-          set -euo pipefail
-          PIN_VER="5.31.0"
-          SPEC=$(ls -1 ~/.pub-cache/hosted/pub.dev/braintree_native_ui-*/ios/braintree_native_ui.podspec 2>/dev/null | head -n1)
-          test -f "$SPEC" || { echo "Podspec não encontrado no pub-cache"; ls -la ~/.pub-cache/hosted/pub.dev/ | sed -n '1,200p'; exit 1; }
-          echo "Antes:"; grep -n "Braintree" "$SPEC" || true
-          ruby - "$SPEC" "$PIN_VER" <<'RB'
-            p  = ARGV[0]; v = ARGV[1]; t = File.read(p)
-            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\s*,\s*['"]~>[^'"]+['"]/, "s.dependency 'Braintree', '#{v}'")
-            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\b(?!\s*,)/,          "s.dependency 'Braintree', '#{v}'")
-            File.write(p, t)
-          RB
-          echo "Depois:"; grep -n "Braintree" "$SPEC" || true
-
-      - name: Patch Podfile (use_frameworks! + Braintree 5.31.0)
+      - name: Patch Podfile (use_frameworks! + Braintree via Git tag)
         script: |
           set -euo pipefail
           PODFILE="ios/Podfile"
-          # CDN + plataforma
+          BR_TAG="v5.31.0"
+
+          # Fonte + plataforma
           grep -q "^source 'https://cdn.cocoapods.org/'" "$PODFILE" || sed -i.bak "1isource 'https://cdn.cocoapods.org/'" "$PODFILE"
           if grep -q "^platform :ios" "$PODFILE"; then
             sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"
           else
             awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
           fi
+
           # use_frameworks! dentro do Runner
           awk '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
             {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-          # Remover entradas antigas e injetar umbrella + subspecs
+
+          # Remove qualquer Braintree antigo (inclui umbrella)
           sed -i.bak "/pod 'Braintree[^']*'/d" "$PODFILE"
-          awk '
+
+          # Injeta subspecs via Git (tag com prefixo 'v')
+          awk -v tag="$BR_TAG" '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
             inrunner && /flutter_install_all_ios_pods/ && !printed {
-              print "  pod '\''Braintree'\'', '\''5.31.0'\''"
-              print "  pod '\''Braintree/Card'\''"
-              print "  pod '\''Braintree/ThreeDSecure'\''"
-              print "  pod '\''Braintree/DataCollector'\''"
+              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
               printed=1
-            }
-            {print}
+            } {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
+
           echo "== Podfile final ==" && cat "$PODFILE"
 
       - name: Install CocoaPods
