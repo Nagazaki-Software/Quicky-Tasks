@@ -1,3 +1,4 @@
+# ios/Podfile
 source 'https://cdn.cocoapods.org/'
 platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -6,7 +7,7 @@ ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
 project 'Runner', {
-  'Debug' => :debug,
+  'Debug'   => :debug,
   'Profile' => :release,
   'Release' => :release,
 }
@@ -24,17 +25,34 @@ end
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 flutter_ios_podfile_setup
 
+# ===== App principal =====
 target 'Runner' do
   # Gera módulos Swift sem modular headers globais
   use_frameworks! :linkage => :static
 
+  # Plugins do Flutter (inclui FirebaseMessaging via plugin flutterfire)
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree 6.x
+  # Seus pods extras
   pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
+end
+
+# ===== Extensão de Notificação com imagem =====
+# Ajuste o nome do target abaixo se for diferente em seu projeto Xcode
+target 'ImageNotification' do
+  # Herdar search paths do alvo pai (inclui coisas do Flutter quando necessário)
+  inherit! :search_paths
+
+  # Módulos Swift como frameworks estáticos (necessário p/ Firebase* em extensão)
+  use_frameworks! :linkage => :static
+
+  # Dependências específicas da extensão
+  pod 'Firebase/Messaging'
+  # Se você manipula mídia/imagem na extensão e usa SDWebImage, ative:
+  # pod 'SDWebImage'
 end
 
 post_install do |installer|
@@ -42,7 +60,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(t)
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      # ⚠️ Deixe o CocoaPods controlar essa flag; evite override no Runner target
+      # Deixe o CocoaPods gerenciar libs Swift
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
