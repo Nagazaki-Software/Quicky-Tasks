@@ -21,18 +21,17 @@ workflows:
           flutter clean && flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Patch braintree_native_ui.podspec (fix versão)
+      - name: Patch braintree_native_ui.podspec (pub-cache)
         script: |
           set -euo pipefail
-          SPEC="ios/.symlinks/plugins/braintree_native_ui/ios/braintree_native_ui.podspec"
-          test -f "$SPEC" || (echo "Podspec não encontrado em $SPEC"; ls -la ios/.symlinks/plugins || true; exit 1)
+          PIN_VER="5.31.0"
+          SPEC=$(ls -1 ~/.pub-cache/hosted/pub.dev/braintree_native_ui-*/ios/braintree_native_ui.podspec 2>/dev/null | head -n1)
+          test -f "$SPEC" || { echo "Podspec não encontrado no pub-cache"; ls -la ~/.pub-cache/hosted/pub.dev/ | sed -n '1,200p'; exit 1; }
           echo "Antes:"; grep -n "Braintree" "$SPEC" || true
-          # Força umbrella para 5.31.0 (valor existente no CDN)
-          ruby - "$SPEC" <<'RB'
-            p = ARGV[0]
-            t = File.read(p)
-            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\s*,\s*['"]~>[^'"]+['"]/, "s.dependency 'Braintree', '5.31.0'")
-            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\b(?!\s*,)/, "s.dependency 'Braintree', '5.31.0'")
+          ruby - "$SPEC" "$PIN_VER" <<'RB'
+            p  = ARGV[0]; v = ARGV[1]; t = File.read(p)
+            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\s*,\s*['"]~>[^'"]+['"]/, "s.dependency 'Braintree', '#{v}'")
+            t = t.gsub(/s\.dependency\s+['"]Braintree['"]\b(?!\s*,)/,          "s.dependency 'Braintree', '#{v}'")
             File.write(p, t)
           RB
           echo "Depois:"; grep -n "Braintree" "$SPEC" || true
@@ -53,7 +52,7 @@ workflows:
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
             {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-          # Remove pins antigos e injeta umbrella + subspecs válidos
+          # Remover entradas antigas e injetar umbrella + subspecs
           sed -i.bak "/pod 'Braintree[^']*'/d" "$PODFILE"
           awk '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
