@@ -1,9 +1,7 @@
 workflows:
   ios-release:
     name: iOS Release (no codesign)
-    environment:
-      flutter: stable
-      xcode: latest
+    environment: { flutter: stable, xcode: latest }
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -14,62 +12,41 @@ workflows:
       - name: Versions
         script: |
           set -euo pipefail
-          flutter --version
-          xcodebuild -version
-          ruby -v || true
-          pod --version || true
+          flutter --version && xcodebuild -version
+          ruby -v || true; pod --version || true
 
       - name: Flutter clean & pub get
         script: |
           set -euo pipefail
-          flutter clean
-          flutter pub get
+          flutter clean && flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
       - name: Patch Podfile (use_frameworks! + Braintree via Git)
         script: |
           set -euo pipefail
           PODFILE="ios/Podfile"
-
-          # Fonte CDN e platform
+          BR_TAG="5.32.1"   # <<< ajuste aqui se quiser outro ref
           grep -q "^source 'https://cdn.cocoapods.org/'" "$PODFILE" || sed -i.bak "1isource 'https://cdn.cocoapods.org/'" "$PODFILE"
-          if grep -q "^platform :ios" "$PODFILE"; then
-            sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"
-          else
-            awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next} {print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-          fi
-
-          # use_frameworks! dentro do target Runner
-          awk '
-            /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {print; print "  use_frameworks!"; next}
-            {print}
-          ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-
-          # Remove qualquer linha antiga de Braintree/BraintreeCore/etc.
+          if grep -q "^platform :ios" "$PODFILE"; then sed -i.bak "s/^platform :ios.*/platform :ios, '15.0'/" "$PODFILE"; else awk 'NR==1{print; print "platform :ios, '\''15.0'\''"; next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"; fi
+          awk '/target[[:space:]]+'\''Runner'\''[[:space:]]+do/{print;print "  use_frameworks!";next}{print}' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
           sed -i.bak "/pod 'Braintree[^\']*'/d" "$PODFILE"
-
-          # Injeta pods modulares da Braintree a partir do Git (mesma tag em todos)
-          awk '
+          awk -v tag="$BR_TAG" '
             /target[[:space:]]+'\''Runner'\''[[:space:]]+do/ {inrunner=1}
             inrunner && /flutter_install_all_ios_pods/ && !printed {
-              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''5.33.0'\''"
-              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''5.33.0'\''"
-              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''5.33.0'\''"
-              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''5.33.0'\''"
+              print "  pod '\''BraintreeCore'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeCard'\'',          :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeThreeDSecure'\'',  :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
+              print "  pod '\''BraintreeDataCollector'\'', :git => '\''https://github.com/braintree/braintree_ios.git'\'', :tag => '\''" tag "'\''"
               printed=1
-            }
-            {print}
+            } {print}
           ' "$PODFILE" > "$PODFILE.tmp" && mv "$PODFILE.tmp" "$PODFILE"
-
           echo "== Podfile final ==" && cat "$PODFILE"
 
       - name: Instalar CocoaPods e atualizar repos
         script: |
           set -euo pipefail
           gem list -i cocoapods || gem install cocoapods -N --user-install
-          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"
-          export PATH="$GEM_BIN:$PATH"
-          pod --version
+          export GEM_BIN="$(ruby -e 'print Gem.user_dir')/bin"; export PATH="$GEM_BIN:$PATH"
           cd ios
           pod repo update
           pod install --repo-update || (echo "retry pod install..." && sleep 5 && pod install --repo-update)
