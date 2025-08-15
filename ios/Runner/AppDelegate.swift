@@ -1,6 +1,12 @@
 import UIKit
 import Flutter
-import BraintreeCore // <- v6: use o módulo Core para BTAppContextSwitcher
+
+// Funciona com CocoaPods (módulo "Braintree") e com SPM (módulo "BraintreeCore")
+#if canImport(BraintreeCore)
+import BraintreeCore
+#elseif canImport(Braintree)
+import Braintree
+#endif
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -13,20 +19,20 @@ import BraintreeCore // <- v6: use o módulo Core para BTAppContextSwitcher
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  // 🔹 Retorno de app/browser (Venmo, PayPal nativo, etc) — v6:
-  //     use o SINGLETON e o método handleOpen(url)
+  // Retorno de app/browser (Venmo/PayPal nativo) — Braintree v6
   override func application(
     _ app: UIApplication,
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey : Any] = [:]
   ) -> Bool {
 
-    // Não precisa checar scheme; deixa o SDK decidir se a URL é dele
+    // Só compila este bloco se algum módulo do Braintree está disponível
+    #if canImport(BraintreeCore) || canImport(Braintree)
     if BTAppContextSwitcher.sharedInstance.handleOpen(url) {
       return true
     }
+    #endif
 
-    // Deixa Flutter/terceiros tentarem
     return super.application(app, open: url, options: options)
   }
 }
