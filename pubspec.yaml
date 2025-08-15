@@ -30,7 +30,10 @@ dependencies:
   apple_maps_flutter: ^1.4.0
   audio_waveforms: ^1.0.6
   auto_size_text: 3.0.0
-  braintree_native_ui: 0.3.7
+  braintree_native_ui:
+    git:
+      url: https://github.com/lucascelopes/braintree_native_ui
+      ref: main # ou um tag como v0.3.8, ou um commit SHA específico
   cached_network_image: 3.4.1
   cached_network_image_platform_interface: 4.1.1
   cached_network_image_web: 1.3.1
