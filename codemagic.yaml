@@ -7,10 +7,7 @@ workflows:
       vars:
         EXPORT_PLIST_PATH: $HOME/export_options.plist   # gerado pelo use-profiles
       groups:
-        - appstore_credentials  # APP_STORE_CONNECT_PRIVATE_KEY / KEY_IDENTIFIER / ISSUER_ID
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.nagazakisoftware.quick   # o Codemagic também busca perfis para extensões
+        - appstore_credentials   # APP_STORE_CONNECT_PRIVATE_KEY / APP_STORE_CONNECT_KEY_IDENTIFIER / APP_STORE_CONNECT_ISSUER_ID
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -129,14 +126,13 @@ workflows:
       - name: Aplicar perfis/certificados do App Store Connect
         script: |
           set -euo pipefail
-          # Gera e instala perfis/certificados + cria $HOME/export_options.plist
+          # Baixa/cria perfis, instala certificados e gera $HOME/export_options.plist
           xcode-project use-profiles --workspace ios/Runner.xcworkspace --scheme Runner
           test -f "$HOME/export_options.plist" && echo "ExportOptions gerado em $HOME/export_options.plist"
 
       - name: Build IPA assinado (Release)
         script: |
           set -euo pipefail
-          # Número de build único evita conflito no TestFlight
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
           flutter build ipa --release \
@@ -152,7 +148,6 @@ workflows:
           : "${APP_STORE_CONNECT_PRIVATE_KEY:?Falta APP_STORE_CONNECT_PRIVATE_KEY (.p8)}"
           : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER}"
           : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID}"
-          # Usa as credenciais do grupo appstore_credentials
           echo "$APP_STORE_CONNECT_PRIVATE_KEY" > /tmp/AuthKey.p8
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
