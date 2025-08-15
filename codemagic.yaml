@@ -1,15 +1,14 @@
 workflows:
   ios-release:
-    name: iOS Release (no codesign)
+    name: iOS Release (App Store Connect)
     environment:
       flutter: stable
       xcode: latest
+      vars:
+        EXPORT_PLIST_PATH: ios/ExportOptions.plist
     cache:
       cache_paths:
         - ~/.pub-cache
-        # Reative estes dois depois que estabilizar:
-        # - ios/Pods
-        # - ios/Podfile.lock
         - ~/Library/Caches/CocoaPods
 
     scripts:
@@ -37,7 +36,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (gerado no CI)
+      - name: Escrever/Atualizar Podfile (com Runner + ImageNotification)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -71,23 +70,19 @@ workflows:
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree v6.x — subspecs explícitos (inclui ApplePay)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
-            # Se for usar PayPal/Venmo nativos, descomente:
             # pod 'Braintree/PayPal',      '~> 6.36'
             # pod 'Braintree/Venmo',       '~> 6.36'
           end
 
-          # ===== Notification Service Extension =====
+          # ===== Extensão de Notificação =====
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
-
-            # O seu NotificationService.swift importa FirebaseMessaging:
             pod 'Firebase/Messaging'
           end
 
@@ -102,33 +97,20 @@ workflows:
           end
           PODFILE
 
-      - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
+      - name: Patch xcconfigs do Flutter para herdar Pods
         script: |
           set -euo pipefail
           mkdir -p ios/Flutter
           for mode in Debug Profile Release; do
-            f="ios/Flutter/${mode}.xcconfig"
-            test -f "$f" || touch "$f"
+            f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
           done
-          prepend_once () {
-            local file="$1"; local line="$2"
-            if ! grep -Fq "$line" "$file"; then
-              tmp="$(mktemp)"
-              { echo "$line"; cat "$file"; } > "$tmp"
-              mv "$tmp" "$file"
-            fi
-          }
+          prepend_once () { local file="$1"; local line="$2"; grep -Fq "$line" "$file" || { tmp="$(mktemp)"; { echo "$line"; cat "$file"; } > "$tmp"; mv "$tmp" "$file"; }; }
           prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-          echo "== Primeiras linhas após patch =="
-          for f in ios/Flutter/*.xcconfig; do
-            echo "---- $f ----"
-            sed -n '1,3p' "$f" || true
-          done
-
-      - name: Pod install (clean, com checks robustos)
+      - name: Pod install (clean)
         script: |
           set -euo pipefail
           source $CM_ENV
@@ -138,44 +120,63 @@ workflows:
           pod _1.16.2_ install
           cd ..
 
-      - name: Build iOS (release, no codesign)
+      # ====== CODE SIGNING ======
+      - name: Instalar certificado (.p12) no keychain
         script: |
           set -euo pipefail
-          source $CM_ENV
-          flutter pub get
-          which pod && pod --version
-          flutter build ios --release --no-codesign
+          # Ferramentas do Codemagic
+          keychain initialize
+          echo "$P12_BASE64" | base64 --decode > /tmp/dist.p12
+          keychain add-certificates --certificate /tmp/dist.p12 --certificate-password "$P12_PASSWORD"
+          security find-identity -v
 
-      - name: Empacotar artefatos (.app, .app.zip e .ipa não-assinado)
+      - name: Instalar Provisioning Profiles (Runner + ImageNotification)
         script: |
           set -euo pipefail
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PP_APP_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/Runner_AppStore.mobileprovision"
+          echo "$PP_EXT_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/ImageNotification_AppStore.mobileprovision"
+          ls -lah "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-          APP_DIR="build/ios/iphoneos/Runner.app"
-          ZIP_OUT="build/ios/iphoneos/Runner.app.zip"
-          IPA_DIR="build/ios/ipa"
-          IPA_OUT="${IPA_DIR}/Runner-unsigned.ipa"
+      - name: ExportOptions.plist (App Store)
+        script: |
+          set -euo pipefail
+          cat > "$EXPORT_PLIST_PATH" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>uploadSymbols</key><true/>
+            <key>uploadBitcode</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
+          PLIST
 
-          test -d "$APP_DIR" || (echo "Runner.app não encontrado em $APP_DIR" && exit 1)
+      - name: Build IPA assinado (Release)
+        script: |
+          set -euo pipefail
+          # Gera .xcarchive e exporta IPA assinado com os perfis instalados
+          flutter build ipa --release --export-options-plist="$EXPORT_PLIST_PATH"
 
-          # Zip da .app (pra baixar fácil)
-          (cd build/ios/iphoneos && zip -qry "$(basename "$ZIP_OUT")" "Runner.app")
-
-          # IPA não-assinado (estrutura Payload/)
-          mkdir -p "$IPA_DIR"
-          STAGE_DIR="build/tmp"
-          rm -rf "$STAGE_DIR"
-          mkdir -p "$STAGE_DIR/Payload"
-          cp -R "$APP_DIR" "$STAGE_DIR/Payload/"
-          (cd "$STAGE_DIR" && zip -qry "../ios/ipa/$(basename "$IPA_OUT")" "Payload")
-          rm -rf "$STAGE_DIR"
-
-          echo "== Artefatos gerados =="
-          ls -lah "$ZIP_OUT" || true
-          ls -lah "$IPA_OUT" || true
-
+      # ====== PUBLISH to TestFlight ======
+      - name: Upload para App Store Connect (TestFlight)
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
+          test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
+          echo "$ASC_API_KEY_BASE64" | base64 --decode > /tmp/AuthKey.p8
+          xcrun altool --upload-app \
+            -f "$IPA_PATH" \
+            --type ios \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
+          echo "Upload disparado: $IPA_PATH"
 
     artifacts:
-      - build/ios/iphoneos/Runner.app
-      - build/ios/iphoneos/Runner.app.zip
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
