@@ -217,7 +217,10 @@ dependency_overrides:
   package_info_plus: 8.0.2
   package_info_plus_platform_interface: 3.0.1
   uuid: ^4.0.0
-  braintree_native_ui: 0.3.7
+  braintree_native_ui:
+    git:
+      url: https://github.com/lucascelopes/braintree_native_ui
+      ref: main # ou um tag como v0.3.8, ou um commit SHA específico
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
