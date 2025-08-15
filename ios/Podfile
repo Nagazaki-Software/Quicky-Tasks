@@ -1,0 +1,52 @@
+# ios/Podfile
+source 'https://cdn.cocoapods.org/'
+platform :ios, '14.0'
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+install! 'cocoapods', :warn_for_unused_master_specs_repo => false
+
+project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
+
+def flutter_root
+  generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+  File.foreach(generated_xcconfig) do |line|
+    m = line.match(/FLUTTER_ROOT\=(.*)/); return m[1].strip if m
+  end
+  raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+end
+
+require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+flutter_ios_podfile_setup
+
+# ===== App principal =====
+target 'Runner' do
+  use_frameworks! :linkage => :static
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  # ✅ Braintree via subspecs (gera módulos Swift: BraintreeCore, BraintreeCard, etc.)
+  pod 'Braintree/Core',          '~> 6.36'
+  pod 'Braintree/Card',          '~> 6.36'
+  pod 'Braintree/ThreeDSecure',  '~> 6.36'
+  pod 'Braintree/DataCollector', '~> 6.36'
+  # (se usar PayPal/ApplePay/Venmo, adicione:)
+  # pod 'Braintree/PayPal',      '~> 6.36'
+  # pod 'Braintree/ApplePay',    '~> 6.36'
+  # pod 'Braintree/Venmo',       '~> 6.36'
+end
+
+# ===== Extensão de Notificação =====
+target 'ImageNotification' do
+  inherit! :search_paths
+  use_frameworks! :linkage => :static
+  pod 'Firebase/Messaging'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |t|
+    flutter_additional_ios_build_settings(t)
+    t.build_configurations.each do |c|
+      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+    end
+  end
+end

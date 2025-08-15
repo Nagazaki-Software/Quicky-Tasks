@@ -1,0 +1,110 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services" // se você usa Firebase/Play Services
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
+}
+
+def flutterVersionCode = (localProperties.getProperty('flutter.versionCode') ?: '1')
+def flutterVersionName = (localProperties.getProperty('flutter.versionName') ?: '1.0')
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.nagazakisoftware.quick"
+    compileSdkVersion 35
+
+    defaultConfig {
+        applicationId "com.nagazakisoftware.quick"
+        minSdkVersion 21
+        targetSdkVersion 35
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
+    }
+
+    // ✅ Java 17 (necessário pra AGP 8.x)
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // ✅ Kotlin alinhado
+    kotlinOptions { jvmTarget = "17" }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    // ✅ DSL nova do Lint
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+        disable += ['InvalidPackage']
+    }
+
+    // Assinatura: usa release se houver keystore; senão cai no debug (pra não travar)
+    def hasKeystore = keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()
+    signingConfigs {
+        debug { /* padrão */ }
+        release {
+            if (hasKeystore) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+
+    // ✅ evita conflitos de licenças em libs de terceiros
+    packaging {
+        resources {
+            excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    // Desugar (ok manter mesmo em Java 17 para retro-APIs)
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+
+    // NÃO force a stdlib do Kotlin — o Gradle/AGP gerencia a correta.
+    // implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0"  <-- REMOVIDO
+
+    // Testes (opcional atualizar depois)
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+
+    // (Opcional) Card.io se quiser leitura de cartão via câmera no Drop-in:
+    // implementation 'io.card:android-sdk:5.+'
+}
