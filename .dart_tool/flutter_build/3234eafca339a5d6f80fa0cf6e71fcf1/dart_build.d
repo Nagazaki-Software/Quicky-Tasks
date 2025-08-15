@@ -1,0 +1,1 @@
+ C:\\Users\\lucas\\Documents\\GitHub\\Quicky-Tasks\\.dart_tool\\flutter_build\\3234eafca339a5d6f80fa0cf6e71fcf1\\dart_build_result.json: 
