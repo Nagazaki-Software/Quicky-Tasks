@@ -1,111 +1,52 @@
-# Podfile gerado para Flutter + Braintree (CocoaPods) sem use_frameworks!
+# ios/Podfile
 source 'https://cdn.cocoapods.org/'
-platform :ios, '15.0'
+platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
+project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
 
-# Descobre o FLUTTER_ROOT de forma robusta
 def flutter_root
   generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-
-  if File.exist?(generated_xcconfig)
-    File.foreach(generated_xcconfig) do |line|
-      m = line.match(/FLUTTER_ROOT\=(.*)/)
-      return m[1].strip if m
-    end
+  raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+  File.foreach(generated_xcconfig) do |line|
+    m = line.match(/FLUTTER_ROOT\=(.*)/); return m[1].strip if m
   end
-
-  if ENV['FLUTTER_ROOT'] && !ENV['FLUTTER_ROOT'].empty? && File.directory?(ENV['FLUTTER_ROOT'])
-    return ENV['FLUTTER_ROOT']
-  end
-
-  # tenta regenerar silenciosamente
-  system('bash', '-lc', 'cd .. && flutter pub get 1>/dev/null 2>&1')
-  if File.exist?(generated_xcconfig)
-    File.foreach(generated_xcconfig) do |line|
-      m = line.match(/FLUTTER_ROOT\=(.*)/)
-      return m[1].strip if m
-    end
-  end
-
-  raise "Generated.xcconfig não encontrado e ENV['FLUTTER_ROOT'] não definida. Rode `flutter pub get` na raiz do projeto."
+  raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
 end
 
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
-
 flutter_ios_podfile_setup
 
+# ===== App principal =====
 target 'Runner' do
-  # ⚠️ sem use_frameworks! — libs estáticas funcionam melhor com plugins Flutter
+  use_frameworks! :linkage => :static
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree via CocoaPods (NÃO via git), linha 6.x
-  pod 'Braintree',               '~> 6.36'
+  # ✅ Braintree via subspecs (gera módulos Swift: BraintreeCore, BraintreeCard, etc.)
+  pod 'Braintree/Core',          '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
+  # (se usar PayPal/ApplePay/Venmo, adicione:)
+  # pod 'Braintree/PayPal',      '~> 6.36'
+  # pod 'Braintree/ApplePay',    '~> 6.36'
+  # pod 'Braintree/Venmo',       '~> 6.36'
 end
 
-# Se tiver mais targets, adicione aqui (também sem use_frameworks!)
-# target 'ImageNotification' do
-#   pod 'Firebase/Messaging'
-# end
-
-# ===== Wrapper seguro para diferenças de assinatura do helper do Flutter =====
-def _call_flutter_build_settings_safely(installer)
-  return unless self.respond_to?(:flutter_additional_ios_build_settings)
-  arity = -1
-  begin
-    arity = method(:flutter_additional_ios_build_settings).arity
-  rescue
-  end
-
-  if arity == 1
-    installer.pods_project.targets.each do |t|
-      begin
-        flutter_additional_ios_build_settings(t)
-      rescue NoMethodError, ArgumentError
-      end
-    end
-    return
-  end
-
-  if arity == 0
-    begin
-      flutter_additional_ios_build_settings
-      return
-    rescue NoMethodError, ArgumentError
-    end
-  end
-
-  begin
-    flutter_additional_ios_build_settings(installer)
-  rescue NoMethodError, ArgumentError
-  end
+# ===== Extensão de Notificação =====
+target 'ImageNotification' do
+  inherit! :search_paths
+  use_frameworks! :linkage => :static
+  pod 'Firebase/Messaging'
 end
-# ============================================================================
 
 post_install do |installer|
-  # NUNCA chamar o helper direto: usa o wrapper
-  _call_flutter_build_settings_safely(installer)
-
-  # Ajustes globais de build (inclui headers do Flutter nos search paths)
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      config.build_settings['SWIFT_VERSION'] = '5.0'
-      # Header search paths para módulos que incluem <Flutter/Flutter.h>
-      existing = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
-      extra = ['$(PODS_ROOT)/Headers/Public', '$(PODS_ROOT)/Headers/Public/Flutter']
-      config.build_settings['HEADER_SEARCH_PATHS'] =
-        Array(existing) + extra
-      # Garante módulos habilitados
-      config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+  installer.pods_project.targets.each do |t|
+    flutter_additional_ios_build_settings(t)
+    t.build_configurations.each do |c|
+      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
 end
