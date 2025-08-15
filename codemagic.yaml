@@ -121,7 +121,7 @@ workflows:
           cd ..
 
       # ====== CODE SIGNING ======
-    - name: Instalar certificado (.p12) no keychain (opcional)
+      - name: Instalar certificado (.p12) no keychain (opcional)
         script: |
           set -euo pipefail
           if [[ -n "${P12_BASE64:-}" && -n "${P12_PASSWORD:-}" ]]; then
@@ -138,14 +138,15 @@ workflows:
             rm -f cert.p12
             security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH" >/dev/null
           else
-            echo "== Sem P12_BASE64/P12_PASSWORD; pulando instalação manual. Usando assinatura automática (use-profiles). =="
+            echo "== Sem P12_BASE64/P12_PASSWORD; pulando instalação manual. Usando perfis instalados/automáticos. =="
           fi
-
 
       - name: Instalar Provisioning Profiles (Runner + ImageNotification)
         script: |
           set -euo pipefail
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          : "${PP_APP_BASE64:?Defina PP_APP_BASE64 (Runner App Store .mobileprovision base64)}"
+          : "${PP_EXT_BASE64:?Defina PP_EXT_BASE64 (ImageNotification App Store .mobileprovision base64)}"
           echo "$PP_APP_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/Runner_AppStore.mobileprovision"
           echo "$PP_EXT_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/ImageNotification_AppStore.mobileprovision"
           ls -lah "$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -161,7 +162,6 @@ workflows:
             <key>method</key><string>app-store</string>
             <key>signingStyle</key><string>manual</string>
             <key>uploadSymbols</key><true/>
-            <key>uploadBitcode</key><false/>
             <key>stripSwiftSymbols</key><true/>
             <key>compileBitcode</key><false/>
             <key>destination</key><string>export</string>
@@ -179,14 +179,12 @@ workflows:
       - name: Upload para App Store Connect (TestFlight)
         script: |
           set -euo pipefail
+          : "${ASC_KEY_ID:?Defina ASC_KEY_ID (App Store Connect API Key ID)}"
+          : "${ASC_ISSUER_ID:?Defina ASC_ISSUER_ID (App Store Connect Issuer ID)}"
           IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
           test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
-          echo "$ASC_API_KEY_BASE64" | base64 --decode > /tmp/AuthKey.p8
-          xcrun altool --upload-app \
-            -f "$IPA_PATH" \
-            --type ios \
-            --apiKey "$ASC_KEY_ID" \
-            --apiIssuer "$ASC_ISSUER_ID"
+          # Use iTMSTransporter (recomendado)
+          xcrun iTMSTransporter -m upload -assetFile "$IPA_PATH" -apiKey "$ASC_KEY_ID" -apiIssuer "$ASC_ISSUER_ID" -v informational
           echo "Upload disparado: $IPA_PATH"
 
     artifacts:
