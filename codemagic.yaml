@@ -38,7 +38,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (se você preferir gerar no CI)
+      - name: Escrever/Atualizar Podfile (gerado no CI)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -71,10 +71,15 @@ workflows:
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            pod 'Braintree',               '~> 6.36'
+            # Braintree v6.x — subspecs explícitos (inclui ApplePay)
+            pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
+            pod 'Braintree/ApplePay',      '~> 6.36'
+            # Se for usar PayPal/Venmo nativos, descomente:
+            # pod 'Braintree/PayPal',      '~> 6.36'
+            # pod 'Braintree/Venmo',       '~> 6.36'
           end
 
           post_install do |installer|
@@ -88,7 +93,7 @@ workflows:
           end
           PODFILE
 
-            - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
+      - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
         script: |
           set -euo pipefail
 
@@ -118,7 +123,6 @@ workflows:
             echo "---- $f ----"
             sed -n '1,3p' "$f" || true
           done
-
 
       - name: Pod install (clean, com checks robustos)
         script: |
@@ -161,7 +165,29 @@ workflows:
           which pod && pod --version
           flutter build ios --release --no-codesign
 
+      - name: Empacotar artefatos (.app, .app.zip e .ipa não-assinado)
+        script: |
+          set -euo pipefail
+          APP_DIR="build/ios/iphoneos/Runner.app"
+          test -d "$APP_DIR" || (echo "Runner.app não encontrado em $APP_DIR" && exit 1)
+
+          # Zip da .app (útil para baixar)
+          (cd build/ios/iphoneos && zip -qry Runner.app.zip Runner.app)
+
+          # IPA não-assinado (Payload/)
+          mkdir -p build/ios/ipa
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_DIR" Payload/
+          (cd Payload && zip -qry ../ios/ipa/Runner-unsigned.ipa .)
+          rm -rf Payload
+
+          echo "== Artefatos gerados =="
+          ls -lah build/ios/iphoneos/Runner.app.zip || true
+          ls -lah build/ios/ipa/Runner-unsigned.ipa || true
+
     artifacts:
-      - build/ios/iphoneos/*.ipa
+      - build/ios/iphoneos/Runner.app
+      - build/ios/iphoneos/Runner.app.zip
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
