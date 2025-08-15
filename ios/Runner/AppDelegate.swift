@@ -1,9 +1,10 @@
 import UIKit
 import Flutter
-import Braintree
+import BraintreeCore // <- v6: use o módulo Core para BTAppContextSwitcher
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -12,11 +13,20 @@ import Braintree
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  // 🔹 Intercepta o retorno do browser/app no 3D Secure ou PayPal
-  override func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-    if url.scheme?.localizedCaseInsensitiveCompare("com.nagazakisoftware.quick.payments") == .orderedSame {
-        return BTAppContextSwitcher.handleOpenURL(url)
+  // 🔹 Retorno de app/browser (Venmo, PayPal nativo, etc) — v6:
+  //     use o SINGLETON e o método handleOpen(url)
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+  ) -> Bool {
+
+    // Não precisa checar scheme; deixa o SDK decidir se a URL é dele
+    if BTAppContextSwitcher.sharedInstance.handleOpen(url) {
+      return true
     }
+
+    // Deixa Flutter/terceiros tentarem
     return super.application(app, open: url, options: options)
   }
 }
