@@ -33,7 +33,6 @@ workflows:
         script: |
           set -euo pipefail
           flutter clean
-          # Precache iOS para garantir Flutter.xcframework local
           flutter precache --ios
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
@@ -67,6 +66,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
+          # ===== App principal =====
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -80,6 +80,15 @@ workflows:
             # Se for usar PayPal/Venmo nativos, descomente:
             # pod 'Braintree/PayPal',      '~> 6.36'
             # pod 'Braintree/Venmo',       '~> 6.36'
+          end
+
+          # ===== Notification Service Extension =====
+          target 'ImageNotification' do
+            inherit! :search_paths
+            use_frameworks! :linkage => :static
+
+            # O seu NotificationService.swift importa FirebaseMessaging:
+            pod 'Firebase/Messaging'
           end
 
           post_install do |installer|
@@ -96,15 +105,11 @@ workflows:
       - name: Patch xcconfigs do Flutter para herdar Pods (corrige warning do CocoaPods)
         script: |
           set -euo pipefail
-
-          # Garante a pasta e os arquivos base
           mkdir -p ios/Flutter
           for mode in Debug Profile Release; do
             f="ios/Flutter/${mode}.xcconfig"
             test -f "$f" || touch "$f"
           done
-
-          # Função segura para PREPENDER uma linha se ainda não existir
           prepend_once () {
             local file="$1"; local line="$2"
             if ! grep -Fq "$line" "$file"; then
@@ -113,7 +118,6 @@ workflows:
               mv "$tmp" "$file"
             fi
           }
-
           prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
@@ -132,29 +136,6 @@ workflows:
           rm -rf Pods Podfile.lock .symlinks
           pod repo update
           pod _1.16.2_ install
-
-          echo "== Tentando localizar Flutter.xcframework =="
-          FOUND=""
-          for p in \
-            "Pods/Flutter/Flutter.xcframework" \
-            "Flutter/Flutter.xcframework" \
-            ".symlinks/flutter/ios/Flutter.xcframework" \
-            ".symlinks/flutter/ios-release/Flutter.xcframework" \
-            ".symlinks/flutter/ios-profile/Flutter.xcframework"
-          do
-            if [ -d "$p" ] || [ -f "$p" ]; then
-              echo "Encontrado: $p"
-              FOUND="1"
-            fi
-          done
-
-          if [ -z "$FOUND" ]; then
-            echo "Não achei Flutter.xcframework em locais comuns. Procurando Flutter.h..."
-            if ! grep -R "Flutter.h" Pods -n && ! grep -R "Flutter.h" . -n ; then
-              echo "FALHA: 'Flutter.xcframework' e 'Flutter.h' não encontrados."
-              exit 1
-            fi
-          fi
           cd ..
 
       - name: Build iOS (release, no codesign)
@@ -170,19 +151,13 @@ workflows:
           set -euo pipefail
           APP_DIR="build/ios/iphoneos/Runner.app"
           test -d "$APP_DIR" || (echo "Runner.app não encontrado em $APP_DIR" && exit 1)
-
-          # Zip da .app (útil para baixar)
           (cd build/ios/iphoneos && zip -qry Runner.app.zip Runner.app)
-
-          # IPA não-assinado (Payload/)
           mkdir -p build/ios/ipa
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_DIR" Payload/
           (cd Payload && zip -qry ../ios/ipa/Runner-unsigned.ipa .)
           rm -rf Payload
-
-          echo "== Artefatos gerados =="
           ls -lah build/ios/iphoneos/Runner.app.zip || true
           ls -lah build/ios/ipa/Runner-unsigned.ipa || true
 
