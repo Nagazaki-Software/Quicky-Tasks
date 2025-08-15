@@ -121,7 +121,7 @@ workflows:
           cd ..
 
       # ====== CODE SIGNING ======
-     - name: Instalar certificado (.p12) no keychain (opcional)
+    - name: Instalar certificado (.p12) no keychain (opcional)
         script: |
           set -euo pipefail
           if [[ -n "${P12_BASE64:-}" && -n "${P12_PASSWORD:-}" ]]; then
@@ -140,7 +140,6 @@ workflows:
           else
             echo "== Sem P12_BASE64/P12_PASSWORD; pulando instalação manual. Usando assinatura automática (use-profiles). =="
           fi
-
 
 
       - name: Instalar Provisioning Profiles (Runner + ImageNotification)
