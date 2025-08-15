@@ -121,29 +121,26 @@ workflows:
           cd ..
 
       # ====== CODE SIGNING ======
-      - name: Instalar certificado (.p12) no keychain
+     - name: Instalar certificado (.p12) no keychain (opcional)
         script: |
           set -euo pipefail
-      
-          # Falha com mensagem amigável se faltar variável
-          : "${P12_BASE64:?Defina a secret P12_BASE64 com o .p12 em base64}"
-          : "${P12_PASSWORD:?Defina a secret P12_PASSWORD com a senha do .p12}"
+          if [[ -n "${P12_BASE64:-}" && -n "${P12_PASSWORD:-}" ]]; then
+            echo "== Instalando .p12 no keychain (modo manual) =="
+            KEYCHAIN_DIR="$HOME/Library/codemagic-cli-tools/keychains"
+            KEYCHAIN_PATH="$KEYCHAIN_DIR/${CM_BUILD_ID:-cm}.keychain-db"
+            mkdir -p "$KEYCHAIN_DIR"
+            security create-keychain -p "" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 0 "$KEYCHAIN_PATH"
+            security default-keychain -s "$KEYCHAIN_PATH"
+            security unlock-keychain -p "" "$KEYCHAIN_PATH"
+            echo "$P12_BASE64" | base64 --decode > cert.p12
+            security import cert.p12 -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+            rm -f cert.p12
+            security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH" >/dev/null
+          else
+            echo "== Sem P12_BASE64/P12_PASSWORD; pulando instalação manual. Usando assinatura automática (use-profiles). =="
+          fi
 
-          KEYCHAIN_DIR="$HOME/Library/codemagic-cli-tools/keychains"
-          KEYCHAIN_PATH="$KEYCHAIN_DIR/${CM_BUILD_ID:-cm}.keychain-db"
-      
-          mkdir -p "$KEYCHAIN_DIR"
-          security create-keychain -p "" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 0 "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security unlock-keychain -p "" "$KEYCHAIN_PATH"
-      
-          echo "$P12_BASE64" | base64 --decode > cert.p12
-          security import cert.p12 -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          rm -f cert.p12
-      
-          # Dá permissão pro codesign usar a chave sem prompt
-          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH" >/dev/null
 
 
       - name: Instalar Provisioning Profiles (Runner + ImageNotification)
