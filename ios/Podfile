@@ -2,8 +2,6 @@
 source 'https://cdn.cocoapods.org/'
 platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-
-# Evita warn do master specs
 install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
 project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
@@ -20,52 +18,39 @@ end
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 flutter_ios_podfile_setup
 
-# ============ APP PRINCIPAL ============
+# ========= APP PRINCIPAL =========
 target 'Runner' do
   use_frameworks! :linkage => :static
-  # Modular headers ajudam na resolução dos módulos em CI
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree (como você já tinha)
+  # Braintree (como você já usa)
   pod 'Braintree/Core',          '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
-  # pod 'Braintree/PayPal',      '~> 6.36'
-  # pod 'Braintree/ApplePay',    '~> 6.36'
-  # pod 'Braintree/Venmo',       '~> 6.36'
 end
 
-# ============ EXTENSÃO DE NOTIFICAÇÃO ============
-# ⚠️ O nome abaixo PRECISA ser exatamente o nome do target no Xcode
+# ========= EXTENSÃO DE NOTIFICAÇÃO =========
+# ⚠️ Troque o nome abaixo para o NOME EXATO do target da sua extensão no Xcode
 target 'ImageNotification' do
-  # Não herde pods do Runner; extensão só precisa do que for explícito
-  # inherit! :search_paths   # <- Removido para evitar confusão
-
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  # Mensagens do Firebase para extensão
-  # O agregador puxa FirebaseMessaging + dependências
-  pod 'Firebase/Messaging'
-
-  # Em alguns ambientes CI o Messaging só aparece se o Core também estiver listado
-  pod 'Firebase/Core'
+  # 👉 Pod direto (NÃO o agregador)
+  pod 'FirebaseMessaging'
+  # Opcional: ajuda a resolver dependências em CI
+  pod 'FirebaseCore'
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |t|
     flutter_additional_ios_build_settings(t)
-
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      # Garante versão do Swift coerente em todos os targets (inclusive extensão)
       c.build_settings['SWIFT_VERSION'] = '5.0'
-      # Simulador ARM em CI
       c.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-      # Evita embed desnecessário
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
