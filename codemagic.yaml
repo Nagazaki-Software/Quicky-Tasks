@@ -47,7 +47,12 @@ workflows:
           source 'https://cdn.cocoapods.org/'
           platform :ios, '14.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-          install! 'cocoapods', :warn_for_unused_master_specs_repo => false
+
+          # Integração mais estável com múltiplos targets
+          install! 'cocoapods',
+            :warn_for_unused_master_specs_repo => false,
+            :generate_multiple_pod_projects => false,
+            :integrate_targets => true
 
           project 'Runner', {
             'Debug' => :debug,
@@ -68,9 +73,12 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
+          # App principal
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+            # Braintree
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -78,10 +86,11 @@ workflows:
             pod 'Braintree/ApplePay',      '~> 6.36'
           end
 
+          # Extensão de notificação (NÃO traga Firebase aqui pra evitar duplicação do GoogleUtilities)
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
-            pod 'Firebase/Messaging'
+            # nada de 'pod Firebase/Messaging' aqui
           end
 
           post_install do |installer|
@@ -89,6 +98,10 @@ workflows:
               flutter_additional_ios_build_settings(t)
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+                # Extensões devem usar apenas APIs permitidas
+                if t.name == 'ImageNotification'
+                  c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
               end
             end
