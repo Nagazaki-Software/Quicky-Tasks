@@ -96,23 +96,11 @@ scripts:
     script: |
       set -euo pipefail
       mkdir -p "$HOME/Library/MobileDevice/Certificates"
-      # macOS usa base64 BSD: -D (decode). Como fallback, uso python pra garantir binário.
-      if base64 -h 2>&1 | grep -q "usage"; then
-        # tentar com -D (BSD)
-        echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12" || \
-        (echo "$IOS_DISTRIBUTION_CERT" | python3 - <<'PY' > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-        import sys,base64
-        sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))
-        PY
-                )
-              else
-                # GNU coreutils (tem --decode/-d)
-                echo "$IOS_DISTRIBUTION_CERT" | base64 --decode > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-              fi
-              # importa passando o caminho e a senha do p12
-              keychain add-certificates \
-                --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
-                --certificate-password @env:CERTIFICATE_PASSWORD
+      # macOS usa base64 BSD: decodifica com -D
+      echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
+      keychain add-certificates \
+        --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+        --certificate-password @env:CERTIFICATE_PASSWORD
 
   - name: Criar/baixar perfis de provisionamento (App Store)
     script: |
