@@ -108,15 +108,24 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-      - name: Importar certificado no keychain (via env Base64)
-        script: |
-          set -euo pipefail
-          mkdir -p "$HOME/Library/MobileDevice/Certificates"
-          # no macOS o base64 é BSD: usa -D para decodificar
-          echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-          keychain add-certificates \
-            --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
-            --certificate-password @env:CERTIFICATE_PASSWORD
+        - name: Importar certificado no keychain (via env Base64)
+              script: |
+                set -euo pipefail
+                mkdir -p "$HOME/Library/MobileDevice/Certificates"
+                # macOS: base64 -D (decode)
+                echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
+            
+                # Validação da senha/arquivo antes de importar no keychain
+                if ! openssl pkcs12 -in "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+                  -nokeys -passin pass:"$CERTIFICATE_PASSWORD" -info </dev/null | head -n1 > /dev/null; then
+                  echo "ERRO: Senha do P12 incorreta ou arquivo .p12 corrompido (IOS_DISTRIBUTION_CERT inválido)." >&2
+                  exit 2
+                fi
+            
+                keychain add-certificates \
+                  --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+                  --certificate-password @env:CERTIFICATE_PASSWORD
+
 
       - name: Criar/baixar perfis de provisionamento (App Store)
         script: |
