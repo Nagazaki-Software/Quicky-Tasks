@@ -20,7 +20,7 @@ import 'dart:convert';
 /// Requer a Cloud Function configurada em firebase/custom_cloud_functions/braintree.js.
 Future<String> processBraintreeCard3DSNativeUI(
   String
-      backendUrl, // ex.: https://us-central1/<proj>.cloudfunctions.net/braintree
+      backendUrl, // ex.: https://us-central1/<proj>.cloudfunctions.net/braintreePayment
   double amount,
   String email,
   // Cartão
