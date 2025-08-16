@@ -26,6 +26,79 @@ class CardplacehokderWidget extends StatefulWidget {
 
 class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
   late CardplacehokderModel _model;
+Future<String?> _getClientToken() async {
+    const backendUrl =
+        'https://us-central1-quick-b108e.cloudfunctions.net/clientTokenBraintree';
+    try {
+      final response = await http.get(Uri.parse(backendUrl));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        return body['clientToken'] as String?;
+      }
+    } catch (e) {
+      debugPrint('Client token error: $e');
+    }
+    return null;
+  }
+
+  Future<void> _payWithGoogle(double amount) async {
+    final authorization = await _getClientToken();
+    if (authorization == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to obtain client token')),
+      );
+      return;
+    }
+    
+  Future<void> _payWithGoogle(double amount) async {
+    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
+    try {
+      final nonce = await _braintree.requestGooglePayPayment(
+        authorization: authorization,
+        amount: amount.toStringAsFixed(2),
+        currencyCode: 'USD',
+      );
+      if (nonce != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Pay nonce: $nonce')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google Pay error: $e')),
+      );
+    }
+  }
+
+  Future<void> _payWithApple(double amount) async {
+    final authorization = await _getClientToken();
+    if (authorization == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to obtain client token')),
+      );
+      return;
+    }
+    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
+    try {
+      final nonce = await _braintree.requestApplePayPayment(
+        authorization: authorization,
+        merchantIdentifier: 'merchant.com.example',
+        countryCode: 'US',
+        currencyCode: 'USD',
+        amount: amount.toStringAsFixed(2),
+      );
+      if (nonce != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Apple Pay nonce: $nonce')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Apple Pay error: $e')),
+      );
+    }
+  }
+
 
   @override
   void setState(VoidCallback callback) {
