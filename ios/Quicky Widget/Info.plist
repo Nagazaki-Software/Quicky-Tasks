@@ -8,6 +8,8 @@
     <string>com.apple.widgetkit-extension</string>
     <key>NSExtensionAttributes</key>
     <dict>
+      <key>WKAppBundleIdentifier</key>
+      <string>com.nagazakisoftware.quick</string>
       <key>WidgetFamily</key>
       <array>
         <string>systemSmall</string>
