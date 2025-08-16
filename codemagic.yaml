@@ -165,12 +165,18 @@ workflows:
             --type IOS_APP_STORE \
             --create \
             --verbose || true
+          # Perfil para a WidgetExtension (ajuste o bundle id se necessário)
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
+            --type IOS_APP_STORE \
+            --create \
+            --verbose || true
 
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
           xcode-project use-profiles
-          xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH" --export-options-method app-store --skip-build
+          # gera o ExportOptions.plist (sem flags antigas)
+          xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH"
           test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
 
       - name: Build IPA assinado (Release)
