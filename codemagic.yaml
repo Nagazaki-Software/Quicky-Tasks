@@ -5,13 +5,9 @@ workflows:
       flutter: stable
       xcode: latest
       vars:
-        EXPORT_PLIST_PATH: $HOME/export_options.plist   # será gerado abaixo
+        EXPORT_PLIST_PATH: $HOME/export_options.plist
       groups:
         - appstore_credentials   # APP_STORE_CONNECT_PRIVATE_KEY / APP_STORE_CONNECT_KEY_IDENTIFIER / APP_STORE_CONNECT_ISSUER_ID
-      ios_signing:
-        distribution_type: app_store
-        # deixe o bundle id do app principal aqui; perfis extras (ex.: extensão) são buscados pelo passo "fetch-signing-files"
-        bundle_identifier: com.nagazakisoftware.quick
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -71,7 +67,6 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # ===== App principal =====
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -81,11 +76,8 @@ workflows:
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
-            # pod 'Braintree/PayPal',      '~> 6.36'
-            # pod 'Braintree/Venmo',       '~> 6.36'
           end
 
-          # ===== Extensão de Notificação =====
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
@@ -126,16 +118,15 @@ workflows:
           pod _1.16.2_ install
           cd ..
 
-      # ====== CODE SIGNING AUTOMÁTICO (App Store Connect) ======
+      # ====== CODE SIGNING (via API do App Store Connect) ======
       - name: Buscar perfis/certificados no App Store Connect
         script: |
           set -euo pipefail
-          # App principal
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
             --type IOS_APP_STORE \
             --create \
             --verbose
-          # Extensão (se existir esse target). Se não tiver, esse comando só vai passar com 'true'.
+          # Se não tiver a extensão, esse comando ignora com sucesso
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
             --type IOS_APP_STORE \
             --create \
@@ -149,9 +140,7 @@ workflows:
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
-          # Detecta o projeto automaticamente e aplica os perfis corretos
           xcode-project use-profiles
-          # Gera o ExportOptions.plist para export "app-store" (sem compilar)
           xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH" --export-options-method app-store --skip-build
           test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
 
@@ -164,7 +153,6 @@ workflows:
             --build-number=$FLUTTER_BUILD_NUMBER \
             --export-options-plist="$EXPORT_PLIST_PATH"
 
-      # ====== PUBLISH to TestFlight ======
       - name: Upload para App Store Connect (TestFlight)
         script: |
           set -euo pipefail
