@@ -1,3 +1,4 @@
+# ios/Podfile
 source 'https://cdn.cocoapods.org/'
 platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -17,27 +18,16 @@ end
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 flutter_ios_podfile_setup
 
-abstract_target 'AllTargets' do
+target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  # ===== Runner =====
-  target 'Runner' do
-    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-    pod 'Braintree/Core',          '~> 6.36'
-    pod 'Braintree/Card',          '~> 6.36'
-    pod 'Braintree/ThreeDSecure',  '~> 6.36'
-    pod 'Braintree/DataCollector', '~> 6.36'
-  end
-
-  # ===== Extensão =====
-  # ⚠️ Nome exato do target da extensão
-  target 'ImageNotification' do
-    # Nada de inherit aqui
-    pod 'FirebaseMessaging'
-    pod 'FirebaseCore'
-  end
+  pod 'Braintree/Core',          '~> 6.36'
+  pod 'Braintree/Card',          '~> 6.36'
+  pod 'Braintree/ThreeDSecure',  '~> 6.36'
+  pod 'Braintree/DataCollector', '~> 6.36'
 end
 
 post_install do |installer|
