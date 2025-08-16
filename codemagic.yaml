@@ -19,16 +19,29 @@ workflows:
         script: |
           set -euo pipefail
           flutter --version && xcodebuild -version
-          ruby -v || true; pod --version || true
+          ruby -v || true; rbenv versions || true; pod --version || true
 
-      - name: Install CocoaPods 1.16.2 (persist PATH)
+      - name: Install CocoaPods 1.16.2 (persist PATH + Ruby)
         script: |
           set -euo pipefail
+          # Escolhe uma versão de Ruby gerenciada pelo rbenv (pega a mais recente listada)
+          RB="$(rbenv versions --bare | grep -E '^[0-9]+\.[0-9]+' | tail -n1 || echo '')"
+          if [ -n "$RB" ]; then
+            rbenv shell "$RB"
+            echo "export RBENV_VERSION=$RB" >> $CM_ENV
+          fi
+
           gem uninstall cocoapods -aIx || true
           gem install cocoapods -v 1.16.2 -N --user-install
-          echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
+          rbenv rehash || true
+
+          # Persiste o PATH para os próximos steps
+          echo 'export GEM_BIN=$(ruby -e "print Gem.user_dir")/bin' >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
+
+          # Mostra versões
           source $CM_ENV
+          which pod || true
           pod --version
 
       - name: Flutter clean, precache & pub get
@@ -53,11 +66,7 @@ workflows:
             :generate_multiple_pod_projects => false,
             :integrate_targets => true
 
-          project 'Runner', {
-            'Debug' => :debug,
-            'Profile' => :release,
-            'Release' => :release,
-          }
+          project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
 
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
@@ -125,8 +134,15 @@ workflows:
       - name: CocoaPods install (limpo)
         script: |
           set -euo pipefail
+          # Recarrega Ruby/Path persistidos
+          source $CM_ENV || true
+          [ -n "${RBENV_VERSION:-}" ] && rbenv shell "$RBENV_VERSION" || true
+          export PATH="${GEM_BIN:-$HOME/.gem/ruby/*/bin}:$PATH"
+
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
           cd ios
+          which pod || true
+          pod --version
           pod repo update
           pod install --verbose
           cd ..
@@ -189,13 +205,12 @@ workflows:
           mkdir -p ~/.private_keys
           KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
 
-          # Se for PEM puro (-----BEGIN ...-----), grava direto; se for base64, decodifica
+          # Se for PEM (-----BEGIN ...-----) grava direto; se for base64, decodifica
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
-
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           ls -l ~/.private_keys/ || true
 
