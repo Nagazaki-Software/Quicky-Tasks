@@ -51,7 +51,7 @@ Future<String?> _getClientToken() async {
     }
     
   Future<void> _payWithGoogle(double amount) async {
-    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
+    const authorization = clientToken;
     try {
       final nonce = await _braintree.requestGooglePayPayment(
         authorization: authorization,
@@ -78,11 +78,11 @@ Future<String?> _getClientToken() async {
       );
       return;
     }
-    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
+    const authorization = clientToken;
     try {
       final nonce = await _braintree.requestApplePayPayment(
         authorization: authorization,
-        merchantIdentifier: 'merchant.com.example',
+        merchantIdentifier: 'merchant.com.nagazakisoftware.quick',
         countryCode: 'US',
         currencyCode: 'USD',
         amount: amount.toStringAsFixed(2),
