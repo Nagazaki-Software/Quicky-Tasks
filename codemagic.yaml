@@ -108,24 +108,29 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-      - name: Importar certificado no keychain
-        script: |
-          set -euo pipefail
-          # importa TODOS os .p12 que você subiu em "Code signing identities"
-          keychain add-certificates
-
-      - name: Criar/baixar perfis de provisionamento (App Store)
-        script: |
-          set -euo pipefail
-          app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
-            --type IOS_APP_STORE \
-            --create \
-            --verbose
-          # se a extensão não existir, ignora
-          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
-            --type IOS_APP_STORE \
-            --create \
-            --verbose || true
+      - name: Importar certificado no keychain (via env Base64)
+          script: |
+            set -euo pipefail
+            mkdir -p "$HOME/Library/MobileDevice/Certificates"
+            # grava o .p12 a partir da variável base64
+            echo "$IOS_DISTRIBUTION_CERT" | base64 --decode > "$HOME/Library/MobileDevice/Certificates/dist.p12"
+            # importa explicitamente informando o caminho e a senha
+            keychain add-certificates \
+              --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+              --certificate-password @env:CERTIFICATE_PASSWORD
+        
+              - name: Criar/baixar perfis de provisionamento (App Store)
+                script: |
+                  set -euo pipefail
+                  app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+                    --type IOS_APP_STORE \
+                    --create \
+                    --verbose
+                  # se a extensão não existir, ignora
+                  app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+                    --type IOS_APP_STORE \
+                    --create \
+                    --verbose || true
 
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
