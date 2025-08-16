@@ -8,7 +8,7 @@ workflows:
         EXPORT_PLIST_PATH: $HOME/export_options.plist
       groups:
         - appstore_credentials   # API do App Store Connect
-        - ios_signing_files      # <-- crie esse grupo e ponha nele: IOS_DISTRIBUTION_CERT, CERTIFICATE_PASSWORD
+        # - ios_signing_files   # <-- não precisa mais se o .p12 já está na UI
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -108,20 +108,10 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-      - name: Importar certificado no keychain (via env Base64)
+      - name: Importar certificado no keychain
         script: |
           set -euo pipefail
-          mkdir -p "$HOME/Library/MobileDevice/Certificates"
-          # macOS: base64 BSD decodifica com -D
-          echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-          # valida a senha antes de importar (debug amigável)
-          if ! openssl pkcs12 -in "$HOME/Library/MobileDevice/Certificates/dist.p12" -nokeys -passin pass:"$CERTIFICATE_PASSWORD" -info </dev/null | head -n1 >/dev/null; then
-            echo "ERRO: CERTIFICATE_PASSWORD incorreta ou IOS_DISTRIBUTION_CERT inválido." >&2
-            exit 2
-          fi
-          keychain add-certificates \
-            --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
-            --certificate-password @env:CERTIFICATE_PASSWORD
+          keychain add-certificates
 
       - name: Criar/baixar perfis de provisionamento (App Store)
         script: |
