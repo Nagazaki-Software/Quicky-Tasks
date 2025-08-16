@@ -119,15 +119,15 @@ workflows:
               --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
               --certificate-password @env:CERTIFICATE_PASSWORD
         
-              - name: Criar/baixar perfis de provisionamento (App Store)
-                script: |
-                  set -euo pipefail
-                  app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+        - name: Criar/baixar perfis de provisionamento (App Store)
+          script: |
+              set -euo pipefail
+                app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
                     --type IOS_APP_STORE \
                     --create \
                     --verbose
-                  # se a extensão não existir, ignora
-                  app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+                # se a extensão não existir, ignora
+                app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
                     --type IOS_APP_STORE \
                     --create \
                     --verbose || true
