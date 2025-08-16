@@ -8,6 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:braintree_native_ui/braintree_native_ui.dart';
 import 'cardplacehokder_model.dart';
 export 'cardplacehokder_model.dart';
 
@@ -26,7 +29,9 @@ class CardplacehokderWidget extends StatefulWidget {
 
 class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
   late CardplacehokderModel _model;
-Future<String?> _getClientToken() async {
+  final _braintree = BraintreeNativeUi();
+
+  Future<String?> _getClientToken() async {
     const backendUrl =
         'https://us-central1-quick-b108e.cloudfunctions.net/clientTokenBraintree';
     try {
@@ -45,13 +50,10 @@ Future<String?> _getClientToken() async {
     final authorization = await _getClientToken();
     if (authorization == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to obtain client token')),
+        const SnackBar(content: Text('Unable to obtain client token')),
       );
       return;
     }
-    
-  Future<void> _payWithGoogle(double amount) async {
-    const authorization = clientToken;
     try {
       final nonce = await _braintree.requestGooglePayPayment(
         authorization: authorization,
@@ -74,11 +76,10 @@ Future<String?> _getClientToken() async {
     final authorization = await _getClientToken();
     if (authorization == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to obtain client token')),
+        const SnackBar(content: Text('Unable to obtain client token')),
       );
       return;
     }
-    const authorization = clientToken;
     try {
       final nonce = await _braintree.requestApplePayPayment(
         authorization: authorization,
