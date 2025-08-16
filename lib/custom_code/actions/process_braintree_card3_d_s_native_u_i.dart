@@ -17,6 +17,7 @@ import 'dart:convert';
 /// Fluxo: GET token -> tokenizeCard -> 3DS -> deviceData -> POST sale
 /// Observação: o plugin braintree_native_ui não recebe billingAddress em tokenizeCard/performThreeDSecure.
 /// Envie billing no POST para o seu backend (já suportado).
+/// Requer a Cloud Function configurada em firebase/custom_cloud_functions/braintree.js.
 Future<String> processBraintreeCard3DSNativeUI(
   String
       backendUrl, // ex.: https://us-central1/<proj>.cloudfunctions.net/braintree
