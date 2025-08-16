@@ -6,6 +6,8 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 class CardplacehokderModel extends FlutterFlowModel<CardplacehokderWidget> {
   ///  State fields for stateful widgets in this component.
 
+  final formKey = GlobalKey<FormState>();
+
   // State field(s) for TextField widget.
   FocusNode? textFieldFocusNode1;
   TextEditingController? textController1;
