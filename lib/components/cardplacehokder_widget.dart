@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:braintree_native_ui/braintree_native_ui.dart';
 import 'dart:io';
@@ -32,29 +31,58 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
   late CardplacehokderModel _model;
   final _braintree = BraintreeNativeUi();
 
-  Future<String?> _getClientToken() async {
+  Future<String> _getClientToken() async {
     const backendUrl =
         'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment';
-    try {
-      final response = await http.get(Uri.parse(backendUrl));
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        return body['clientToken'] as String?;
+    const maxRetries = 3;
+
+    for (var attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final response = await http.get(Uri.parse(backendUrl));
+
+        if (response.statusCode != 200) {
+          final msg =
+              'Client token request failed with status ${response.statusCode}';
+          debugPrint(msg);
+          throw HttpException(msg);
+        }
+
+        final body = jsonDecode(response.body);
+        final token = body is Map<String, dynamic>
+            ? body['clientToken'] as String?
+            : null;
+
+        if (token != null && token.isNotEmpty) {
+          return token;
+        } else {
+          final msg = 'Client token missing or invalid in response';
+          debugPrint('$msg: ${response.body}');
+          throw const FormatException('Client token missing from response');
+        }
+      } catch (e) {
+        debugPrint('Attempt ${attempt + 1} to fetch client token failed: $e');
+        if (attempt == maxRetries - 1) rethrow;
+        await Future.delayed(const Duration(seconds: 1));
       }
-    } catch (e) {
-      debugPrint('Client token error: $e');
     }
-    return null;
+
+    throw Exception('Unable to obtain client token');
   }
 
   Future<void> _payWithGoogle(double amount) async {
-    final authorization = await _getClientToken();
-    if (authorization == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to obtain client token')),
-      );
+    String authorization;
+    try {
+      authorization = await _getClientToken();
+    } catch (e) {
+      final message = 'Unable to obtain client token: $e';
+      debugPrint(message);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
       return;
     }
+
     try {
       final nonce = await _braintree.requestGooglePayPayment(
         authorization: authorization,
@@ -67,20 +95,29 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google Pay error: $e')),
-      );
+      final message = 'Google Pay error: $e';
+      debugPrint(message);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
     }
   }
 
   Future<void> _payWithApple(double amount) async {
-    final authorization = await _getClientToken();
-    if (authorization == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to obtain client token')),
-      );
+    String authorization;
+    try {
+      authorization = await _getClientToken();
+    } catch (e) {
+      final message = 'Unable to obtain client token: $e';
+      debugPrint(message);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
       return;
     }
+
     try {
       final nonce = await _braintree.requestApplePayPayment(
         authorization: authorization,
@@ -95,12 +132,14 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Apple Pay error: $e')),
-      );
+      final message = 'Apple Pay error: $e';
+      debugPrint(message);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
     }
   }
-
 
   @override
   void setState(VoidCallback callback) {
@@ -193,17 +232,20 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                   options: FFButtonOptions(
                     width: MediaQuery.sizeOf(context).width * 0.8,
                     height: 45.0,
-                    padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+                    padding:
+                        EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
                     iconPadding:
                         EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                     color: FlutterFlowTheme.of(context).tertiary,
                     textStyle: FlutterFlowTheme.of(context).titleSmall.override(
                           font: GoogleFonts.poppins(
                             fontWeight: FontWeight.w500,
-                            fontStyle:
-                                FlutterFlowTheme.of(context).titleSmall.fontStyle,
+                            fontStyle: FlutterFlowTheme.of(context)
+                                .titleSmall
+                                .fontStyle,
                           ),
-                          color: FlutterFlowTheme.of(context).secondaryBackground,
+                          color:
+                              FlutterFlowTheme.of(context).secondaryBackground,
                           letterSpacing: 3.0,
                           fontWeight: FontWeight.w500,
                           fontStyle:
@@ -226,17 +268,20 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                   options: FFButtonOptions(
                     width: MediaQuery.sizeOf(context).width * 0.8,
                     height: 45.0,
-                    padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+                    padding:
+                        EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
                     iconPadding:
                         EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
                     color: FlutterFlowTheme.of(context).secondary,
                     textStyle: FlutterFlowTheme.of(context).titleSmall.override(
                           font: GoogleFonts.poppins(
                             fontWeight: FontWeight.normal,
-                            fontStyle:
-                                FlutterFlowTheme.of(context).titleSmall.fontStyle,
+                            fontStyle: FlutterFlowTheme.of(context)
+                                .titleSmall
+                                .fontStyle,
                           ),
-                          color: FlutterFlowTheme.of(context).secondaryBackground,
+                          color:
+                              FlutterFlowTheme.of(context).secondaryBackground,
                           letterSpacing: 3.0,
                           fontWeight: FontWeight.normal,
                           fontStyle:
