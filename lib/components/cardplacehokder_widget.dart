@@ -1420,29 +1420,6 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                     return;
                   }
 
-                  _model.rapydPayment =
-                      await actions.processBraintreeCard3DSNativeUI(
-                    'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment',
-                    widget.value!,
-                    currentUserEmail,
-                    _model.textController1.text,
-                    functions.retirepartesdadata(
-                        _model.textController2.text, 'month')!,
-                    functions.retirepartesdadata(
-                        _model.textController2.text, 'year')!,
-                    _model.textController3.text,
-                    firstName,
-                    lastName,
-                    phone,
-                    street,
-                    extended,
-                    city,
-                    region,
-                    postal,
-                    country,
-                    'brg8dhjg5tqpw496',
-                    'ORDER-QUICKYQS',
-                  );
                   try {
                     _model.rapydPayment =
                         await actions.processBraintreeCard3DSNativeUI(
@@ -1455,17 +1432,15 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                       functions.retirepartesdadata(
                           _model.textController2.text, 'year')!,
                       _model.textController3.text,
-                      functions.separartextoeescolherposicao(
-                          currentUserDisplayName, 0),
-                      functions.separartextoeescolherposicao(
-                          currentUserDisplayName, 1),
-                      '+348 3467-3478',
-                      'SDFSD',
-                      '',
-                      'Ariozona',
-                      'US',
-                      '92345',
-                      'US',
+                      firstName,
+                      lastName,
+                      phone,
+                      street,
+                      extended,
+                      city,
+                      region,
+                      postal,
+                      country,
                       'brg8dhjg5tqpw496',
                       'ORDER-QUICKYQS',
                     );
@@ -1478,7 +1453,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                       ),
                     );
                     debugPrint('processBraintreeCard3DSNativeUI error: $e');
-                  
+                  }
 
                   safeSetState(() {});
                 },
