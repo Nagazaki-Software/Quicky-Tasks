@@ -19,28 +19,29 @@ workflows:
         script: |
           set -euo pipefail
           flutter --version && xcodebuild -version
-          ruby -v || true; rbenv versions || true; pod --version || true
+          which ruby || true; ruby -v || true
+          which pod || true; pod --version || true
 
-      - name: Install CocoaPods 1.16.2 (persist PATH + Ruby)
+      - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
         script: |
           set -euo pipefail
-          # Escolhe uma versão de Ruby gerenciada pelo rbenv (pega a mais recente listada)
-          RB="$(rbenv versions --bare | grep -E '^[0-9]+\.[0-9]+' | tail -n1 || echo '')"
-          if [ -n "$RB" ]; then
-            rbenv shell "$RB"
-            echo "export RBENV_VERSION=$RB" >> $CM_ENV
-          fi
 
-          gem uninstall cocoapods -aIx || true
-          gem install cocoapods -v 1.16.2 -N --user-install
-          rbenv rehash || true
+          # Instala gems no diretório do usuário usando o Ruby do sistema
+          export GEM_HOME="$HOME/.gem"
+          export GEM_BIN="$GEM_HOME/bin"
+          export PATH="$GEM_BIN:$PATH"
 
-          # Persiste o PATH para os próximos steps
-          echo 'export GEM_BIN=$(ruby -e "print Gem.user_dir")/bin' >> $CM_ENV
+          /usr/bin/gem install cocoapods -v 1.16.2 -N || true
+
+          # Persiste para os próximos steps
+          echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
+          echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
 
-          # Mostra versões
-          source $CM_ENV
+          which ruby
+          ruby -v
+          which gem
+          gem env home
           which pod || true
           pod --version
 
@@ -66,7 +67,11 @@ workflows:
             :generate_multiple_pod_projects => false,
             :integrate_targets => true
 
-          project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
 
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
@@ -134,11 +139,7 @@ workflows:
       - name: CocoaPods install (limpo)
         script: |
           set -euo pipefail
-          # Recarrega Ruby/Path persistidos
           source $CM_ENV || true
-          [ -n "${RBENV_VERSION:-}" ] && rbenv shell "$RBENV_VERSION" || true
-          export PATH="${GEM_BIN:-$HOME/.gem/ruby/*/bin}:$PATH"
-
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
           cd ios
           which pod || true
