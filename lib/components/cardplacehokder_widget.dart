@@ -128,6 +128,41 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     _model.textController4 ??= TextEditingController();
     _model.textFieldFocusNode4 ??= FocusNode();
 
+    _model.textController1Validator = (context, value) {
+      if (value == null || value.isEmpty) {
+        return 'Enter card number';
+      }
+      final digits = value.replaceAll(' ', '');
+      if (digits.length != 16 || int.tryParse(digits) == null) {
+        return 'Card number must be 16 digits';
+      }
+      return null;
+    };
+    _model.textController2Validator = (context, value) {
+      if (value == null || value.isEmpty) {
+        return 'Enter expiration date';
+      }
+      if (!value.contains('/') || value.length != 5) {
+        return 'Use MM/YY';
+      }
+      final parts = value.split('/');
+      final month = int.tryParse(parts[0]);
+      final year = int.tryParse(parts[1]);
+      if (month == null || month < 1 || month > 12 || year == null) {
+        return 'Use MM/YY';
+      }
+      return null;
+    };
+    _model.textController3Validator = (context, value) {
+      if (value == null || value.isEmpty) {
+        return 'Enter CVV';
+      }
+      if (value.length < 3 || value.length > 4 || int.tryParse(value) == null) {
+        return 'CVV must be 3–4 digits';
+      }
+      return null;
+    };
+
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
 
@@ -246,9 +281,11 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                     borderRadius: BorderRadius.circular(8.0),
                   ),
                 ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+              Form(
+                key: _model.formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   Container(
                     width: double.infinity,
                     height: 40.0,
@@ -619,8 +656,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                ],
+                ),
+              ),
                   Container(
                     width: double.infinity,
                     height: 40.0,
@@ -772,6 +810,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
               FFButtonWidget(
                 onPressed: () async {
                   logFirebaseEvent('CARDPLACEHOKDER_COMP_BUY_BTN_ON_TAP');
+                  if (!(_model.formKey.currentState?.validate() ?? false)) {
+                    return;
+                  }
                   logFirebaseEvent('Button_custom_action');
                   _model.rapydPayment =
                       await actions.processBraintreeCard3DSNativeUI(
