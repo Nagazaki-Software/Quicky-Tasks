@@ -103,7 +103,6 @@ workflows:
             f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
           done
 
-          # Função para prefixar uma linha só se ainda não existir
           prepend_once () {
             local file="$1"
             local line="$2"
@@ -129,29 +128,24 @@ workflows:
         script: |
           set -euo pipefail
           mkdir -p "$HOME/Library/MobileDevice/Certificates"
-          # materializa o .p12 a partir da env (Base64)
           echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
           ls -lh "$HOME/Library/MobileDevice/Certificates/dist.p12"
 
-          # cria e destranca keychain dedicado
           KEYCHAIN_NAME="build.keychain"
           security create-keychain -p "" "$KEYCHAIN_NAME"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
           security unlock-keychain -p "" "$KEYCHAIN_NAME"
 
-          # importa o P12 sem pedir UI
           security import "$HOME/Library/MobileDevice/Certificates/dist.p12" \
             -k "$KEYCHAIN_NAME" \
             -P "$CERTIFICATE_PASSWORD" \
             -T /usr/bin/codesign \
             -T /usr/bin/security
 
-          # usa esse keychain e libera acesso às ferramentas
           security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain
           security default-keychain -s "$KEYCHAIN_NAME"
           security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_NAME"
 
-          # debug: identidades disponíveis
           /usr/bin/security find-identity -v "$KEYCHAIN_NAME" || true
 
       - name: Criar/baixar perfis de provisionamento (App Store)
@@ -165,7 +159,6 @@ workflows:
             --type IOS_APP_STORE \
             --create \
             --verbose || true
-          # Perfil para a WidgetExtension (ajuste o bundle id se necessário)
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
             --type IOS_APP_STORE \
             --create \
@@ -174,9 +167,13 @@ workflows:
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
+          # Aplica os perfis e deixa o ExportOptions pronto
           xcode-project use-profiles
-          # gera o ExportOptions.plist (sem flags antigas)
-          xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH"
+          # O use-profiles salva em /Users/builder/export_options.plist (como mostrou seu log).
+          # Copiamos para o caminho que você definiu em EXPORT_PLIST_PATH.
+          if [ -f /Users/builder/export_options.plist ]; then
+            cp /Users/builder/export_options.plist "$EXPORT_PLIST_PATH"
+          fi
           test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
 
       - name: Build IPA assinado (Release)
