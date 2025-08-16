@@ -814,31 +814,42 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                     return;
                   }
                   logFirebaseEvent('Button_custom_action');
-                  _model.rapydPayment =
-                      await actions.processBraintreeCard3DSNativeUI(
-                    'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment',
-                    widget.value!,
-                    currentUserEmail,
-                    _model.textController1.text,
-                    functions.retirepartesdadata(
-                        _model.textController2.text, 'month')!,
-                    functions.retirepartesdadata(
-                        _model.textController2.text, 'year')!,
-                    _model.textController3.text,
-                    functions.separartextoeescolherposicao(
-                        currentUserDisplayName, 0),
-                    functions.separartextoeescolherposicao(
-                        currentUserDisplayName, 1),
-                    '+348 3467-3478',
-                    'SDFSD',
-                    '',
-                    'Ariozona',
-                    'US',
-                    '92345',
-                    'US',
-                    'brg8dhjg5tqpw496',
-                    'ORDER-QUICKYQS',
-                  );
+                  try {
+                    _model.rapydPayment =
+                        await actions.processBraintreeCard3DSNativeUI(
+                      'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment',
+                      widget.value!,
+                      currentUserEmail,
+                      _model.textController1.text,
+                      functions.retirepartesdadata(
+                          _model.textController2.text, 'month')!,
+                      functions.retirepartesdadata(
+                          _model.textController2.text, 'year')!,
+                      _model.textController3.text,
+                      functions.separartextoeescolherposicao(
+                          currentUserDisplayName, 0),
+                      functions.separartextoeescolherposicao(
+                          currentUserDisplayName, 1),
+                      '+348 3467-3478',
+                      'SDFSD',
+                      '',
+                      'Ariozona',
+                      'US',
+                      '92345',
+                      'US',
+                      'brg8dhjg5tqpw496',
+                      'ORDER-QUICKYQS',
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Error processing payment. Please try again.',
+                        ),
+                      ),
+                    );
+                    debugPrint('processBraintreeCard3DSNativeUI error: $e');
+                  }
 
                   safeSetState(() {});
                 },
