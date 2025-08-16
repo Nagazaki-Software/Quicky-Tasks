@@ -5,9 +5,13 @@ workflows:
       flutter: stable
       xcode: latest
       vars:
-        EXPORT_PLIST_PATH: $HOME/export_options.plist   # gerado pelo use-profiles
+        EXPORT_PLIST_PATH: $HOME/export_options.plist   # será gerado abaixo
       groups:
         - appstore_credentials   # APP_STORE_CONNECT_PRIVATE_KEY / APP_STORE_CONNECT_KEY_IDENTIFIER / APP_STORE_CONNECT_ISSUER_ID
+      ios_signing:
+        distribution_type: app_store
+        # deixe o bundle id do app principal aqui; perfis extras (ex.: extensão) são buscados pelo passo "fetch-signing-files"
+        bundle_identifier: com.nagazakisoftware.quick
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -123,12 +127,33 @@ workflows:
           cd ..
 
       # ====== CODE SIGNING AUTOMÁTICO (App Store Connect) ======
-      - name: Aplicar perfis/certificados do App Store Connect
+      - name: Buscar perfis/certificados no App Store Connect
         script: |
           set -euo pipefail
-          # Baixa/cria perfis, instala certificados e gera $HOME/export_options.plist
-          xcode-project use-profiles --workspace ios/Runner.xcworkspace --scheme Runner
-          test -f "$HOME/export_options.plist" && echo "ExportOptions gerado em $HOME/export_options.plist"
+          # App principal
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+            --type IOS_APP_STORE \
+            --create \
+            --verbose
+          # Extensão (se existir esse target). Se não tiver, esse comando só vai passar com 'true'.
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+            --type IOS_APP_STORE \
+            --create \
+            --verbose || true
+
+      - name: Instalar certificados no keychain
+        script: |
+          set -euo pipefail
+          keychain add-certificates
+
+      - name: Aplicar perfis ao projeto e gerar ExportOptions
+        script: |
+          set -euo pipefail
+          # Detecta o projeto automaticamente e aplica os perfis corretos
+          xcode-project use-profiles
+          # Gera o ExportOptions.plist para export "app-store" (sem compilar)
+          xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH" --export-options-method app-store --skip-build
+          test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
 
       - name: Build IPA assinado (Release)
         script: |
