@@ -237,11 +237,12 @@
 		122B4AC32E4E37D700ED3EAB /* Quicky WidgetExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 122B4ADB2E4E37D900ED3EAB /* Build configuration list for PBXNativeTarget "Quicky WidgetExtension" */;
-			buildPhases = (
-				122B4AC02E4E37D700ED3EAB /* Sources */,
-				122B4AC12E4E37D700ED3EAB /* Frameworks */,
-				122B4AC22E4E37D700ED3EAB /* Resources */,
-			);
+                        buildPhases = (
+                                122B4AC02E4E37D700ED3EAB /* Sources */,
+                                122B4AC12E4E37D700ED3EAB /* Frameworks */,
+                                122B4AC22E4E37D700ED3EAB /* Resources */,
+                                122B4AE12E4E37D900ED3EAB /* Remove NSExtensionPrincipalClass */,
+                        );
 			buildRules = (
 			);
 			dependencies = (
@@ -439,7 +440,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		9740EEB61CF901F6004384FC /* Run Script */ = {
+9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -452,7 +453,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
-		};
+               };
+                122B4AE12E4E37D900ED3EAB /* Remove NSExtensionPrincipalClass */ = {
+                        isa = PBXShellScriptBuildPhase;
+                        buildActionMask = 2147483647;
+                        files = (
+                        );
+                        inputPaths = (
+                        );
+                        name = "Remove NSExtensionPrincipalClass";
+                        outputPaths = (
+                        );
+                        runOnlyForDeploymentPostprocessing = 0;
+                        shellPath = /bin/sh;
+                        shellScript = "plutil -remove NSExtensionPrincipalClass \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\" || true\n";
+                };
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -543,7 +558,7 @@
                                 CURRENT_PROJECT_VERSION = 1;
                                 ENABLE_USER_SCRIPT_SANDBOXING = YES;
                                 GCC_C_LANGUAGE_STANDARD = gnu17;
-                                GENERATE_INFOPLIST_FILE = YES;
+                                GENERATE_INFOPLIST_FILE = NO;
                                 INFOPLIST_FILE = "Quicky Widget/Info.plist";
                                 INFOPLIST_KEY_CFBundleDisplayName = "Quicky Widget";
                                 INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -585,7 +600,7 @@
                                 CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GENERATE_INFOPLIST_FILE = YES;
+                                GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Quicky Widget/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quicky Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -624,7 +639,7 @@
                                 CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GENERATE_INFOPLIST_FILE = YES;
+                                GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Quicky Widget/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quicky Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
