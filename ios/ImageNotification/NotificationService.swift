@@ -1,10 +1,7 @@
-// ios/ImageNotification/NotificationService.swift
-
 import UserNotifications
 import FirebaseMessaging
 
 final class NotificationService: UNNotificationServiceExtension {
-
   private var contentHandler: ((UNNotificationContent) -> Void)?
   private var bestAttemptContent: UNMutableNotificationContent?
 
@@ -20,7 +17,6 @@ final class NotificationService: UNNotificationServiceExtension {
       return
     }
 
-    // API nova do Firebase Messaging para extensão
     Messaging.serviceExtension().populateNotificationContent(
       bestAttemptContent,
       withContentHandler: contentHandler
