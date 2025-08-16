@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key>
@@ -20,26 +21,18 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
+
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionPointIdentifier</key>
     <string>com.apple.widgetkit-extension</string>
-    <key>NSExtensionPrincipalClass</key>
-    <string>$(PRODUCT_MODULE_NAME).Quicky_WidgetBundle</string>
     <key>NSExtensionAttributes</key>
     <dict>
-      <key>WKAppBundleIdentifier</key>
-      <string>com.nagazakisoftware.quick</string>
-      <key>WidgetFamily</key>
-      <array>
-        <string>systemSmall</string>
-        <string>systemMedium</string>
-        <string>systemLarge</string>
-        <string>systemExtraLarge</string>
-      </array>
+      <!-- Se o widget usa localização, adicione:
+      <key>NSWidgetWantsLocation</key>
+      <true/>
+      -->
     </dict>
-    <key>NSExtensionPointIdentifier</key>
-    <string>com.apple.widgetkit-extension</string>
   </dict>
 </dict>
 </plist>
