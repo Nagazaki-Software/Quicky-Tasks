@@ -1,147 +1,168 @@
-scripts:
-  - name: Versions
-    script: |
-      set -euo pipefail
-      flutter --version && xcodebuild -version
-      ruby -v || true; pod --version || true
+workflows:
+  ios-release:
+    name: iOS Release (App Store Connect)
+    environment:
+      flutter: stable
+      xcode: latest
+      vars:
+        EXPORT_PLIST_PATH: $HOME/export_options.plist
+      groups:
+        - appstore_credentials   # API do App Store Connect
+        - ios_signing_files      # <-- crie esse grupo e ponha nele: IOS_DISTRIBUTION_CERT, CERTIFICATE_PASSWORD
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ~/Library/Caches/CocoaPods
 
-  - name: Install CocoaPods 1.16.2 (persist PATH)
-    script: |
-      set -euo pipefail
-      gem uninstall cocoapods -aIx || true
-      gem install cocoapods -v 1.16.2 -N --user-install
-      echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
-      echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-      source $CM_ENV
-      pod --version
+    scripts:
+      - name: Versions
+        script: |
+          set -euo pipefail
+          flutter --version && xcodebuild -version
+          ruby -v || true; pod --version || true
 
-  - name: Flutter clean, precache & pub get
-    script: |
-      set -euo pipefail
-      flutter clean
-      flutter precache --ios
-      flutter pub get
-      test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
+      - name: Install CocoaPods 1.16.2 (persist PATH)
+        script: |
+          set -euo pipefail
+          gem uninstall cocoapods -aIx || true
+          gem install cocoapods -v 1.16.2 -N --user-install
+          echo "export GEM_BIN=$(ruby -e 'print Gem.user_dir')/bin" >> $CM_ENV
+          echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
+          source $CM_ENV
+          pod --version
 
-  - name: Escrever/Atualizar Podfile (com Runner + ImageNotification)
-    script: |
-      set -euo pipefail
-      mkdir -p ios
-      cat > ios/Podfile <<'PODFILE'
-      source 'https://cdn.cocoapods.org/'
-      platform :ios, '14.0'
-      ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-      install! 'cocoapods', :warn_for_unused_master_specs_repo => false
+      - name: Flutter clean, precache & pub get
+        script: |
+          set -euo pipefail
+          flutter clean
+          flutter precache --ios
+          flutter pub get
+          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      project 'Runner', {
-        'Debug' => :debug,
-        'Profile' => :release,
-        'Release' => :release,
-      }
+      - name: Escrever/Atualizar Podfile (com Runner + ImageNotification)
+        script: |
+          set -euo pipefail
+          mkdir -p ios
+          cat > ios/Podfile <<'PODFILE'
+          source 'https://cdn.cocoapods.org/'
+          platform :ios, '14.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+          install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
-      def flutter_root
-        generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-        raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
-        File.foreach(generated_xcconfig) do |line|
-          m = line.match(/FLUTTER_ROOT\=(.*)/)
-          return m[1].strip if m
-        end
-        raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
-      end
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
 
-      require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
-      flutter_ios_podfile_setup
-
-      target 'Runner' do
-        use_frameworks! :linkage => :static
-        flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-        pod 'Braintree/Core',          '~> 6.36'
-        pod 'Braintree/Card',          '~> 6.36'
-        pod 'Braintree/ThreeDSecure',  '~> 6.36'
-        pod 'Braintree/DataCollector', '~> 6.36'
-        pod 'Braintree/ApplePay',      '~> 6.36'
-      end
-
-      target 'ImageNotification' do
-        inherit! :search_paths
-        use_frameworks! :linkage => :static
-        pod 'Firebase/Messaging'
-      end
-
-      post_install do |installer|
-        installer.pods_project.targets.each do |t|
-          flutter_additional_ios_build_settings(t)
-          t.build_configurations.each do |c|
-            c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-            c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+          def flutter_root
+            generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+            File.foreach(generated_xcconfig) do |line|
+              m = line.match(/FLUTTER_ROOT\=(.*)/)
+              return m[1].strip if m
+            end
+            raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
           end
-        end
-      end
-      PODFILE
 
-  - name: Patch xcconfigs do Flutter para herdar Pods
-    script: |
-      set -euo pipefail
-      mkdir -p ios/Flutter
-      for mode in Debug Profile Release; do
-        f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
-      done
-      prepend_once () { local file="$1"; local line="$2"; grep -Fq "$line" "$file" || { tmp="$(mktemp)"; { echo "$line"; cat "$file"; } > "$tmp"; mv "$tmp" "$file"; }; }
-      prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
-      prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
-      prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
-      for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
+          require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+          flutter_ios_podfile_setup
 
-  - name: Importar certificado no keychain (via env Base64)
-    script: |
-      set -euo pipefail
-      mkdir -p "$HOME/Library/MobileDevice/Certificates"
-      # macOS usa base64 BSD: decodifica com -D
-      echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-      keychain add-certificates \
-        --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
-        --certificate-password @env:CERTIFICATE_PASSWORD
+          target 'Runner' do
+            use_frameworks! :linkage => :static
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+            pod 'Braintree/Core',          '~> 6.36'
+            pod 'Braintree/Card',          '~> 6.36'
+            pod 'Braintree/ThreeDSecure',  '~> 6.36'
+            pod 'Braintree/DataCollector', '~> 6.36'
+            pod 'Braintree/ApplePay',      '~> 6.36'
+          end
 
-  - name: Criar/baixar perfis de provisionamento (App Store)
-    script: |
-      set -euo pipefail
-      app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
-        --type IOS_APP_STORE \
-        --create \
-        --verbose
-      app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
-        --type IOS_APP_STORE \
-        --create \
-        --verbose || true
+          target 'ImageNotification' do
+            inherit! :search_paths
+            use_frameworks! :linkage => :static
+            pod 'Firebase/Messaging'
+          end
 
-  - name: Aplicar perfis ao projeto e gerar ExportOptions
-    script: |
-      set -euo pipefail
-      xcode-project use-profiles
-      xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH" --export-options-method app-store --skip-build
-      test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
+          post_install do |installer|
+            installer.pods_project.targets.each do |t|
+              flutter_additional_ios_build_settings(t)
+              t.build_configurations.each do |c|
+                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+                c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+              end
+            end
+          end
+          PODFILE
 
-  - name: Build IPA assinado (Release)
-    script: |
-      set -euo pipefail
-      echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
-      source $CM_ENV
-      flutter build ipa --release \
-        --build-number=$FLUTTER_BUILD_NUMBER \
-        --export-options-plist="$EXPORT_PLIST_PATH"
+      - name: Patch xcconfigs do Flutter para herdar Pods
+        script: |
+          set -euo pipefail
+          mkdir -p ios/Flutter
+          for mode in Debug Profile Release; do
+            f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
+          done
+          prepend_once () { local file="$1"; local line="$2"; grep -Fq "$line" "$file" || { tmp="$(mktemp)"; { echo "$line"; cat "$file"; } > "$tmp"; mv "$tmp" "$file"; }; }
+          prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
+          prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
+          prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-  - name: Upload para App Store Connect (TestFlight)
-    script: |
-      set -euo pipefail
-      IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
-      test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
-      : "${APP_STORE_CONNECT_PRIVATE_KEY:?Falta APP_STORE_CONNECT_PRIVATE_KEY (.p8)}"
-      : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER}"
-      : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID}"
-      echo "$APP_STORE_CONNECT_PRIVATE_KEY" > /tmp/AuthKey.p8
-      xcrun altool --upload-app \
-        -f "$IPA_PATH" \
-        --type ios \
-        --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-        --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
-      echo "Upload disparado: $IPA_PATH"
+      - name: Importar certificado no keychain (via env Base64)
+        script: |
+          set -euo pipefail
+          mkdir -p "$HOME/Library/MobileDevice/Certificates"
+          # no macOS o base64 é BSD: usa -D para decodificar
+          echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
+          keychain add-certificates \
+            --certificate "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+            --certificate-password @env:CERTIFICATE_PASSWORD
+
+      - name: Criar/baixar perfis de provisionamento (App Store)
+        script: |
+          set -euo pipefail
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+            --type IOS_APP_STORE \
+            --create \
+            --verbose
+          # se a extensão não existir, ignora
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+            --type IOS_APP_STORE \
+            --create \
+            --verbose || true
+
+      - name: Aplicar perfis ao projeto e gerar ExportOptions
+        script: |
+          set -euo pipefail
+          xcode-project use-profiles
+          xcode-project build-ipa --export-options-plist "$EXPORT_PLIST_PATH" --export-options-method app-store --skip-build
+          test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
+
+      - name: Build IPA assinado (Release)
+        script: |
+          set -euo pipefail
+          echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
+          source $CM_ENV
+          flutter build ipa --release \
+            --build-number=$FLUTTER_BUILD_NUMBER \
+            --export-options-plist="$EXPORT_PLIST_PATH"
+
+      - name: Upload para App Store Connect (TestFlight)
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
+          test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
+          : "${APP_STORE_CONNECT_PRIVATE_KEY:?Falta APP_STORE_CONNECT_PRIVATE_KEY (.p8)}"
+          : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID}"
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > /tmp/AuthKey.p8
+          xcrun altool --upload-app \
+            -f "$IPA_PATH" \
+            --type ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          echo "Upload disparado: $IPA_PATH"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/**/*.xcarchive
