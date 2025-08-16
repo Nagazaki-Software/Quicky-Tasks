@@ -47,6 +47,36 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     return null;
   }
 
+  Future<String> _createTransaction(String nonce, double amount) async {
+    const backendUrl =
+        'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment';
+    final saleBody = {
+      'amount': amount.toStringAsFixed(2),
+      'paymentMethodNonce': nonce,
+      'orderId': 'ORDER-${DateTime.now().millisecondsSinceEpoch}',
+    };
+    final response = await http.post(
+      Uri.parse(backendUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(saleBody),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final txn = data['transaction'] as Map<String, dynamic>?;
+      final id = txn?['id']?.toString();
+      final status = txn?['status']?.toString();
+      if (id != null) {
+        return 'Pagamento aprovado! Transaction ID: $id — status: $status';
+      }
+      return data['message']?.toString() ??
+          'Pagamento realizado com sucesso!';
+    } else {
+      final err = jsonDecode(response.body) as Map<String, dynamic>;
+      final msg = (err['message'] ?? err['error'] ?? response.body).toString();
+      throw Exception('Erro no pagamento: $msg');
+    }
+  }
+
   Future<void> _payWithGoogle(double amount) async {
     final authorization = await _getClientToken();
     if (authorization == null) {
@@ -62,8 +92,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
         currencyCode: 'USD',
       );
       if (nonce != null) {
+        final result = await _createTransaction(nonce, amount);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google Pay nonce: $nonce')),
+          SnackBar(content: Text(result)),
         );
       }
     } catch (e) {
@@ -90,8 +121,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
         amount: amount.toStringAsFixed(2),
       );
       if (nonce != null) {
+        final result = await _createTransaction(nonce, amount);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Apple Pay nonce: $nonce')),
+          SnackBar(content: Text(result)),
         );
       }
     } catch (e) {
