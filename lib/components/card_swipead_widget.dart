@@ -33,10 +33,9 @@ class CardSwipeadWidget extends StatefulWidget {
 class _CardSwipeadWidgetState extends State<CardSwipeadWidget> {
   late CardSwipeadModel _model;
   final _braintree = BraintreeNativeUi();
-
   Future<String?> _getClientToken() async {
     const backendUrl =
-        'https://us-central1/your-project.cloudfunctions.net/braintree';
+        'https://us-central1-quick-b108e.cloudfunctions.net/clientTokenBraintree';
     try {
       final response = await http.get(Uri.parse(backendUrl));
       if (response.statusCode == 200) {
@@ -57,6 +56,9 @@ class _CardSwipeadWidgetState extends State<CardSwipeadWidget> {
       );
       return;
     }
+    
+  Future<void> _payWithGoogle(double amount) async {
+    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
     try {
       final nonce = await _braintree.requestGooglePayPayment(
         authorization: authorization,
@@ -83,6 +85,7 @@ class _CardSwipeadWidgetState extends State<CardSwipeadWidget> {
       );
       return;
     }
+    const authorization = 'YOUR_TOKENIZATION_KEY_OR_CLIENT_TOKEN';
     try {
       final nonce = await _braintree.requestApplePayPayment(
         authorization: authorization,
