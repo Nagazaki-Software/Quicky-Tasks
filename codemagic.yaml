@@ -102,11 +102,30 @@ workflows:
           for mode in Debug Profile Release; do
             f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
           done
-          prepend_once () { local file="$1"; local line="$2"; grep -Fq "$line" "$file" || { tmp="$(mktemp)"; { echo "$line"; cat "$file"; } > "$tmp"; mv "$tmp"; }; }
+
+          # Corrigido: prepend_once agora usa mv com destino
+          prepend_once () {
+            local file="$1"
+            local line="$2"
+            # se a linha já existe, não duplica
+            if grep -Fqx "$line" "$file"; then
+              return 0
+            fi
+            tmp="$(mktemp -t xcconf)"
+            printf '%s\n' "$line" > "$tmp"
+            cat "$file" >> "$tmp"
+            mv -f "$tmp" "$file"
+          }
+
           prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
-          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
+
+          # só pra visualizar as 3 primeiras linhas de cada arquivo
+          for f in ios/Flutter/*.xcconfig; do
+            echo "---- $f ----"
+            sed -n '1,3p' "$f" || true
+          done
 
       - name: Importar certificado no keychain (via env Base64)
         script: |
