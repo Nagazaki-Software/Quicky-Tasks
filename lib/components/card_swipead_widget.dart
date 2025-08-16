@@ -12,6 +12,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:braintree_native_ui/braintree_native_ui.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'card_swipead_model.dart';
 export 'card_swipead_model.dart';
 
@@ -29,6 +32,76 @@ class CardSwipeadWidget extends StatefulWidget {
 
 class _CardSwipeadWidgetState extends State<CardSwipeadWidget> {
   late CardSwipeadModel _model;
+  final _braintree = BraintreeNativeUi();
+
+  Future<String?> _getClientToken() async {
+    const backendUrl =
+        'https://us-central1/your-project.cloudfunctions.net/braintree';
+    try {
+      final response = await http.get(Uri.parse(backendUrl));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        return body['clientToken'] as String?;
+      }
+    } catch (e) {
+      debugPrint('Client token error: $e');
+    }
+    return null;
+  }
+
+  Future<void> _payWithGoogle(double amount) async {
+    final authorization = await _getClientToken();
+    if (authorization == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to obtain client token')),
+      );
+      return;
+    }
+    try {
+      final nonce = await _braintree.requestGooglePayPayment(
+        authorization: authorization,
+        amount: amount.toStringAsFixed(2),
+        currencyCode: 'USD',
+      );
+      if (nonce != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Pay nonce: $nonce')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google Pay error: $e')),
+      );
+    }
+  }
+
+  Future<void> _payWithApple(double amount) async {
+    final authorization = await _getClientToken();
+    if (authorization == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to obtain client token')),
+      );
+      return;
+    }
+    try {
+      final nonce = await _braintree.requestApplePayPayment(
+        authorization: authorization,
+        merchantIdentifier: 'merchant.com.example',
+        countryCode: 'US',
+        currencyCode: 'USD',
+        amount: amount.toStringAsFixed(2),
+      );
+      if (nonce != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Apple Pay nonce: $nonce')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Apple Pay error: $e')),
+      );
+    }
+  }
 
   @override
   void setState(VoidCallback callback) {
@@ -913,6 +986,97 @@ class _CardSwipeadWidgetState extends State<CardSwipeadWidget> {
                                 ),
                               ),
                             ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(
+                          5.0, 8.0, 5.0, 0.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                await _payWithApple(
+                                    containerTasksRecord.pagamentoPrecos);
+                              },
+                              child: Container(
+                                height: 50.0,
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'Apple Pay',
+                                    style: FlutterFlowTheme.of(context)
+                                        .bodyMedium
+                                        .override(
+                                          font: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w500,
+                                            fontStyle:
+                                                FlutterFlowTheme.of(context)
+                                                    .bodyMedium
+                                                    .fontStyle,
+                                          ),
+                                          color: FlutterFlowTheme.of(context)
+                                              .primaryBackground,
+                                          fontSize: 16.0,
+                                          letterSpacing: 0.0,
+                                          fontWeight: FontWeight.w500,
+                                          fontStyle:
+                                              FlutterFlowTheme.of(context)
+                                                  .bodyMedium
+                                                  .fontStyle,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8.0),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                await _payWithGoogle(
+                                    containerTasksRecord.pagamentoPrecos);
+                              },
+                              child: Container(
+                                height: 50.0,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  border: Border.all(color: Colors.black),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'Google Pay',
+                                    style: FlutterFlowTheme.of(context)
+                                        .bodyMedium
+                                        .override(
+                                          font: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w500,
+                                            fontStyle:
+                                                FlutterFlowTheme.of(context)
+                                                    .bodyMedium
+                                                    .fontStyle,
+                                          ),
+                                          color: FlutterFlowTheme.of(context)
+                                              .primaryText,
+                                          fontSize: 16.0,
+                                          letterSpacing: 0.0,
+                                          fontWeight: FontWeight.w500,
+                                          fontStyle:
+                                              FlutterFlowTheme.of(context)
+                                                  .bodyMedium
+                                                  .fontStyle,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
