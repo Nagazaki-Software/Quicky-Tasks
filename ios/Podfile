@@ -1,4 +1,3 @@
-# ios/Podfile
 source 'https://cdn.cocoapods.org/'
 platform :ios, '14.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -18,30 +17,27 @@ end
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 flutter_ios_podfile_setup
 
-# ========= APP PRINCIPAL =========
-target 'Runner' do
+abstract_target 'AllTargets' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  # ===== Runner =====
+  target 'Runner' do
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree (como você já usa)
-  pod 'Braintree/Core',          '~> 6.36'
-  pod 'Braintree/Card',          '~> 6.36'
-  pod 'Braintree/ThreeDSecure',  '~> 6.36'
-  pod 'Braintree/DataCollector', '~> 6.36'
-end
+    pod 'Braintree/Core',          '~> 6.36'
+    pod 'Braintree/Card',          '~> 6.36'
+    pod 'Braintree/ThreeDSecure',  '~> 6.36'
+    pod 'Braintree/DataCollector', '~> 6.36'
+  end
 
-# ========= EXTENSÃO DE NOTIFICAÇÃO =========
-# ⚠️ Troque o nome abaixo para o NOME EXATO do target da sua extensão no Xcode
-target 'ImageNotification' do
-  use_frameworks! :linkage => :static
-  use_modular_headers!
-
-  # 👉 Pod direto (NÃO o agregador)
-  pod 'FirebaseMessaging'
-  # Opcional: ajuda a resolver dependências em CI
-  pod 'FirebaseCore'
+  # ===== Extensão =====
+  # ⚠️ Nome exato do target da extensão
+  target 'ImageNotification' do
+    # Nada de inherit aqui
+    pod 'FirebaseMessaging'
+    pod 'FirebaseCore'
+  end
 end
 
 post_install do |installer|
