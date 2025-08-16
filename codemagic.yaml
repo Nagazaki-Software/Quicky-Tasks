@@ -167,14 +167,18 @@ workflows:
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
-          # Aplica os perfis e deixa o ExportOptions pronto
+          # Gera e aplica perfis; o export_options.plist é salvo em /Users/builder/export_options.plist
           xcode-project use-profiles
-          # O use-profiles salva em /Users/builder/export_options.plist (como mostrou seu log).
-          # Copiamos para o caminho que você definiu em EXPORT_PLIST_PATH.
-          if [ -f /Users/builder/export_options.plist ]; then
-            cp /Users/builder/export_options.plist "$EXPORT_PLIST_PATH"
+          # Só copia se o destino for diferente para evitar erro do cp
+          SRC="/Users/builder/export_options.plist"
+          DEST="$EXPORT_PLIST_PATH"
+          if [ -f "$SRC" ]; then
+            if [ "$SRC" != "$DEST" ]; then
+              cp "$SRC" "$DEST"
+            fi
+            echo "ExportOptions pronto em $SRC"
           fi
-          test -f "$EXPORT_PLIST_PATH" && echo "ExportOptions gerado em $EXPORT_PLIST_PATH"
+          test -f "$DEST" || test -f "$SRC"
 
       - name: Build IPA assinado (Release)
         script: |
