@@ -7,7 +7,8 @@ workflows:
       vars:
         EXPORT_PLIST_PATH: $HOME/export_options.plist
       groups:
-        - appstore_credentials   # APP_STORE_CONNECT_PRIVATE_KEY / APP_STORE_CONNECT_KEY_IDENTIFIER / APP_STORE_CONNECT_ISSUER_ID
+        - appstore_credentials   # API do App Store Connect
+        - ios_signing_files      # <-- crie esse grupo e ponha nele: IOS_DISTRIBUTION_CERT, CERTIFICATE_PASSWORD
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -70,7 +71,6 @@ workflows:
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -108,34 +108,24 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
-      - name: Pod install (clean)
+      - name: Importar certificado no keychain
         script: |
           set -euo pipefail
-          source $CM_ENV
-          cd ios
-          rm -rf Pods Podfile.lock .symlinks
-          pod repo update
-          pod _1.16.2_ install
-          cd ..
+          # importa TODOS os .p12 que você subiu em "Code signing identities"
+          keychain add-certificates
 
-      # ====== CODE SIGNING (via API do App Store Connect) ======
-      - name: Buscar perfis/certificados no App Store Connect
+      - name: Criar/baixar perfis de provisionamento (App Store)
         script: |
           set -euo pipefail
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
             --type IOS_APP_STORE \
             --create \
             --verbose
-          # Se não tiver a extensão, esse comando ignora com sucesso
+          # se a extensão não existir, ignora
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
             --type IOS_APP_STORE \
             --create \
             --verbose || true
-
-      - name: Instalar certificados no keychain
-        script: |
-          set -euo pipefail
-          keychain add-certificates
 
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
