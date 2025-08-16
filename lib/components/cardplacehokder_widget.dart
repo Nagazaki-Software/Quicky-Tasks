@@ -34,7 +34,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
 
   Future<String?> _getClientToken() async {
     const backendUrl =
-        'https://us-central1-quick-b108e.cloudfunctions.net/clientTokenBraintree';
+        'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment';
     try {
       final response = await http.get(Uri.parse(backendUrl));
       if (response.statusCode == 200) {
@@ -775,7 +775,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                   logFirebaseEvent('Button_custom_action');
                   _model.rapydPayment =
                       await actions.processBraintreeCard3DSNativeUI(
-                    'https://us-central1-quick-b108e.cloudfunctions.net/createPaymentIntent',
+                    'https://us-central1-quick-b108e.cloudfunctions.net/braintreePayment',
                     widget.value!,
                     currentUserEmail,
                     _model.textController1.text,
