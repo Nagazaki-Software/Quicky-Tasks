@@ -11,6 +11,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:braintree_native_ui/braintree_native_ui.dart';
+import 'dart:io';
 import 'cardplacehokder_model.dart';
 export 'cardplacehokder_model.dart';
 
@@ -179,70 +180,72 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
                       fontStyle: FontStyle.italic,
                     ),
               ),
-              FFButtonWidget(
-                onPressed: () {
-                  print('Button pressed ...');
-                },
-                text: 'Apple Pay',
-                icon: FaIcon(
-                  FontAwesomeIcons.apple,
-                  size: 15.0,
-                ),
-                options: FFButtonOptions(
-                  width: MediaQuery.sizeOf(context).width * 0.8,
-                  height: 45.0,
-                  padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-                  iconPadding:
-                      EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                  color: FlutterFlowTheme.of(context).tertiary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        font: GoogleFonts.poppins(
+              if (Platform.isIOS)
+                FFButtonWidget(
+                  onPressed: () async {
+                    await _payWithApple(widget.value ?? 0);
+                  },
+                  text: 'Apple Pay',
+                  icon: FaIcon(
+                    FontAwesomeIcons.apple,
+                    size: 15.0,
+                  ),
+                  options: FFButtonOptions(
+                    width: MediaQuery.sizeOf(context).width * 0.8,
+                    height: 45.0,
+                    padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+                    iconPadding:
+                        EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                    color: FlutterFlowTheme.of(context).tertiary,
+                    textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                          font: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w500,
+                            fontStyle:
+                                FlutterFlowTheme.of(context).titleSmall.fontStyle,
+                          ),
+                          color: FlutterFlowTheme.of(context).secondaryBackground,
+                          letterSpacing: 3.0,
                           fontWeight: FontWeight.w500,
                           fontStyle:
                               FlutterFlowTheme.of(context).titleSmall.fontStyle,
                         ),
-                        color: FlutterFlowTheme.of(context).secondaryBackground,
-                        letterSpacing: 3.0,
-                        fontWeight: FontWeight.w500,
-                        fontStyle:
-                            FlutterFlowTheme.of(context).titleSmall.fontStyle,
-                      ),
-                  elevation: 0.0,
-                  borderRadius: BorderRadius.circular(8.0),
+                    elevation: 0.0,
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
                 ),
-              ),
-              FFButtonWidget(
-                onPressed: () {
-                  print('Button pressed ...');
-                },
-                text: 'Google Pay',
-                icon: FaIcon(
-                  FontAwesomeIcons.googlePay,
-                  size: 15.0,
-                ),
-                options: FFButtonOptions(
-                  width: MediaQuery.sizeOf(context).width * 0.8,
-                  height: 45.0,
-                  padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-                  iconPadding:
-                      EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
-                  color: FlutterFlowTheme.of(context).secondary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        font: GoogleFonts.poppins(
+              if (Platform.isAndroid)
+                FFButtonWidget(
+                  onPressed: () async {
+                    await _payWithGoogle(widget.value ?? 0);
+                  },
+                  text: 'Google Pay',
+                  icon: FaIcon(
+                    FontAwesomeIcons.googlePay,
+                    size: 15.0,
+                  ),
+                  options: FFButtonOptions(
+                    width: MediaQuery.sizeOf(context).width * 0.8,
+                    height: 45.0,
+                    padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
+                    iconPadding:
+                        EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 0.0),
+                    color: FlutterFlowTheme.of(context).secondary,
+                    textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                          font: GoogleFonts.poppins(
+                            fontWeight: FontWeight.normal,
+                            fontStyle:
+                                FlutterFlowTheme.of(context).titleSmall.fontStyle,
+                          ),
+                          color: FlutterFlowTheme.of(context).secondaryBackground,
+                          letterSpacing: 3.0,
                           fontWeight: FontWeight.normal,
                           fontStyle:
                               FlutterFlowTheme.of(context).titleSmall.fontStyle,
                         ),
-                        color: FlutterFlowTheme.of(context).secondaryBackground,
-                        letterSpacing: 3.0,
-                        fontWeight: FontWeight.normal,
-                        fontStyle:
-                            FlutterFlowTheme.of(context).titleSmall.fontStyle,
-                      ),
-                  elevation: 0.0,
-                  borderRadius: BorderRadius.circular(8.0),
+                    elevation: 0.0,
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
                 ),
-              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
