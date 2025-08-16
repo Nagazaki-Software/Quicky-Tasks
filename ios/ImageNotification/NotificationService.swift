@@ -1,3 +1,4 @@
+// ios/ImageNotification/NotificationService.swift
 import UserNotifications
 import Foundation
 
@@ -13,7 +14,7 @@ final class NotificationService: UNNotificationServiceExtension {
 
   override func didReceive(
     _ request: UNNotificationRequest,
-    with contentHandler: @escaping (UNNotificationContent) -> Void
+    withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
   ) {
     self.contentHandler = contentHandler
     self.bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
