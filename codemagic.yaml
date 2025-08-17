@@ -171,9 +171,9 @@ workflows:
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
             --type IOS_APP_STORE --create --verbose
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
-            --type IOS_APP_STORE --create --verbose || true
+            --type IOS_APP_STORE --create --verbose
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
-            --type IOS_APP_STORE --create --verbose || true
+            --type IOS_APP_STORE --create --verbose
 
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
@@ -181,8 +181,23 @@ workflows:
           xcode-project use-profiles
           SRC="/Users/builder/export_options.plist"
           DEST="$EXPORT_PLIST_PATH"
-          if [ -f "$SRC" ] && [ "$SRC" != "$DEST" ]; then cp "$SRC" "$DEST"; fi
-          test -f "$DEST" || test -f "$SRC"
+          if [ ! -f "$SRC" ]; then
+            echo "ExportOptions.plist não foi gerado. Verifique perfis/capabilities nos Identifiers." >&2
+            exit 1
+          fi
+          cp -f "$SRC" "$DEST"
+
+      - name: Diagnóstico bundles no archive
+        script: |
+          set -euo pipefail
+          echo "=== Bundles no archive ==="
+          APP_PLIST="$(/usr/bin/find build/ios/archive -name Info.plist -path '*Products*Applications*Runner.app*' | head -n1)"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PLIST" 2>/dev/null || true
+          /usr/bin/find build/ios/archive -name Info.plist -path '*PlugIns*.appex*' -print0 | \
+          while IFS= read -r -d '' P; do
+            echo "--- $P"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$P" 2>/dev/null || true
+          done
 
       - name: Build IPA assinado (Release)
         script: |
