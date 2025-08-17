@@ -28,3 +28,4 @@ struct Quicky_WidgetBundle: WidgetBundle {
         #endif
     }
 }
+
