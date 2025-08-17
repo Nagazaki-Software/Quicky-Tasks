@@ -25,19 +25,13 @@ workflows:
       - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
         script: |
           set -euo pipefail
-
-          # Instala gems no diretório do usuário usando o Ruby do sistema
           export GEM_HOME="$HOME/.gem"
           export GEM_BIN="$GEM_HOME/bin"
           export PATH="$GEM_BIN:$PATH"
-
           /usr/bin/gem install cocoapods -v 1.16.2 -N || true
-
-          # Persiste para os próximos steps
           echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
           echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-
           which ruby
           ruby -v
           which gem
@@ -99,7 +93,7 @@ workflows:
             pod 'Braintree/ApplePay',      '~> 6.36'
           end
 
-          # Extensão de notificação SEM pods (independente do Firebase)
+          # Extensão de notificação SEM pods
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
@@ -179,15 +173,12 @@ workflows:
         script: |
           set -euo pipefail
           xcode-project use-profiles
-
           SRC="/Users/builder/export_options.plist"
           DEST="${EXPORT_PLIST_PATH:-$HOME/export_options.plist}"
-
           if [ ! -f "$SRC" ]; then
             echo "ExportOptions.plist não foi gerado. Verifique perfis/capabilities nos Identifiers." >&2
             exit 1
           fi
-
           if [ "$SRC" != "$DEST" ]; then
             cp -f "$SRC" "$DEST"
             echo "ExportOptions.plist copiado para $DEST"
@@ -198,10 +189,18 @@ workflows:
       - name: Diagnóstico bundles no archive
         script: |
           set -euo pipefail
-          echo "=== Bundles no archive ==="
-          APP_PLIST="$(/usr/bin/find build/ios/archive -name Info.plist -path '*Products*Applications*Runner.app*' | head -n1)"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PLIST" 2>/dev/null || true
-          /usr/bin/find build/ios/archive -name Info.plist -path '*PlugIns*.appex*' -print0 | \
+          # Procura um .xcarchive (se ainda não existir, só pula)
+          ARCHIVE_DIR="$(/usr/bin/find build -type d -name '*.xcarchive' -print -quit || true)"
+          if [ -z "${ARCHIVE_DIR:-}" ]; then
+            echo "Nenhum .xcarchive encontrado ainda (este step roda antes do build). Pulando diagnóstico."
+            exit 0
+          fi
+          echo "=== Bundles no archive ($ARCHIVE_DIR) ==="
+          APP_PLIST="$(/usr/bin/find "$ARCHIVE_DIR" -name Info.plist -path '*Products*Applications*Runner.app*' -print -quit || true)"
+          if [ -n "${APP_PLIST:-}" ]; then
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PLIST" 2>/dev/null || true
+          fi
+          /usr/bin/find "$ARCHIVE_DIR" -name Info.plist -path '*PlugIns*.appex*' -print0 | \
           while IFS= read -r -d '' P; do
             echo "--- $P"
             /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$P" 2>/dev/null || true
