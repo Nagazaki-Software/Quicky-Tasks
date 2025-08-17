@@ -9,7 +9,7 @@ import Foundation
 import WidgetKit
 import AppIntents
 
-// MARK: - Intent de configuração do Widget (não precisa de perform())
+// MARK: - Intent de configuração do Widget (NÃO precisa de perform())
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Configuration"
@@ -19,7 +19,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// MARK: - AppIntent com perform() (para silenciar a exigência do protocolo)
+// MARK: - AppIntent "normal" com perform() (para satisfazer o protocolo AppIntent)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
     static var title: LocalizedStringResource = "Quicky Action"
@@ -28,7 +28,7 @@ struct QuickyActionIntent: AppIntent {
     @Parameter(title: "Message")
     var message: String?
 
-    // perform() precisa estar disponível em extensões 16.0+
+    // O perform() precisa estar disponível em extensões 16.0+
     @MainActor
     func perform() async throws -> some IntentResult {
         let output = (message?.isEmpty == false) ? message! : "OK"
