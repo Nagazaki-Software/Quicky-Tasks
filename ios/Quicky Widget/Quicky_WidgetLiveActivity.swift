@@ -9,6 +9,7 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
+@available(iOSApplicationExtension 16.1, *)
 struct Quicky_WidgetAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         // Dynamic stateful properties about your activity go here!
@@ -19,6 +20,7 @@ struct Quicky_WidgetAttributes: ActivityAttributes {
     var name: String
 }
 
+@available(iOSApplicationExtension 16.1, *)
 struct Quicky_WidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: Quicky_WidgetAttributes.self) { context in
@@ -56,12 +58,14 @@ struct Quicky_WidgetLiveActivity: Widget {
     }
 }
 
+@available(iOSApplicationExtension 16.1, *)
 extension Quicky_WidgetAttributes {
     fileprivate static var preview: Quicky_WidgetAttributes {
         Quicky_WidgetAttributes(name: "World")
     }
 }
 
+@available(iOSApplicationExtension 16.1, *)
 extension Quicky_WidgetAttributes.ContentState {
     fileprivate static var smiley: Quicky_WidgetAttributes.ContentState {
         Quicky_WidgetAttributes.ContentState(emoji: "😀")
@@ -70,11 +74,4 @@ extension Quicky_WidgetAttributes.ContentState {
      fileprivate static var starEyes: Quicky_WidgetAttributes.ContentState {
          Quicky_WidgetAttributes.ContentState(emoji: "🤩")
      }
-}
-
-#Preview("Notification", as: .content, using: Quicky_WidgetAttributes.preview) {
-   Quicky_WidgetLiveActivity()
-} contentStates: {
-    Quicky_WidgetAttributes.ContentState.smiley
-    Quicky_WidgetAttributes.ContentState.starEyes
 }
