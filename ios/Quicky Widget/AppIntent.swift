@@ -9,8 +9,7 @@ import Foundation
 import WidgetKit
 import AppIntents
 
-// MARK: - Intent de configuração do Widget
-// Importante: dupla anotação de disponibilidade (iOS e iOSApplicationExtension)
+// MARK: - Intent de configuração do Widget (NÃO precisa de perform())
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
@@ -21,7 +20,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// MARK: - AppIntent "normal" com perform() para satisfazer o protocolo
+// MARK: - AppIntent com perform() (explicitamente disponível em extensões)
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
@@ -31,6 +30,9 @@ struct QuickyActionIntent: AppIntent {
     @Parameter(title: "Message")
     var message: String?
 
+    // Alguns toolchains exigem a disponibilidade no MÉTODO também (além da struct).
+    @available(iOS 16.0, *)
+    @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
         let output = (message?.isEmpty == false) ? message! : "OK"
