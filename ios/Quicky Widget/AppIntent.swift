@@ -5,29 +5,15 @@
 //  Created by Enzo Godoy on 14/08/2025.
 //
 
+// Compile este arquivo SOMENTE quando estiver construindo a Widget Extension.
+// O Xcode define WIDGET_EXTENSION para targets de extensão.
+#if canImport(WidgetKit) && canImport(AppIntents) && WIDGET_EXTENSION
+
 import Foundation
 import WidgetKit
 import AppIntents
 
-// ----------------------------------------------------------------------
-// FIX universal: fornece um perform() padrão para QUALQUER AppIntent,
-// explicitamente disponível em extensões (iOSApplicationExtension 16.0+).
-// Isso silencia a exigência do compilador em Configuration intents.
-// ----------------------------------------------------------------------
-@available(iOS 16.0, *)
-@available(iOSApplicationExtension 16.0, *)
-extension AppIntent {
-    @available(iOS 16.0, *)
-    @available(iOSApplicationExtension 16.0, *)
-    @MainActor
-    public func perform() async throws -> some IntentResult {
-        // Resultado vazio (não retorna valor). Intents que precisarem
-        // podem sobrescrever normalmente com seu próprio perform().
-        return .result()
-    }
-}
-
-// MARK: - Intent de configuração do Widget (NÃO precisa de perform())
+// MARK: - Intent de configuração do Widget (não precisa de perform())
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
@@ -38,7 +24,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// (Opcional) Um AppIntent com perform() próprio, só para demonstração.
+// MARK: - AppIntent com perform() (disponível para extensões)
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
@@ -48,11 +34,13 @@ struct QuickyActionIntent: AppIntent {
     @Parameter(title: "Message")
     var message: String?
 
+    // Alguns toolchains exigem a disponibilidade no MÉTODO também.
     @available(iOS 16.0, *)
     @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
-        let msg = (message?.isEmpty == false) ? message! : "OK"
-        return .result(value: msg)
+        return .result() // retorno vazio é o mais compatível
     }
 }
+
+#endif
