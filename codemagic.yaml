@@ -179,13 +179,21 @@ workflows:
         script: |
           set -euo pipefail
           xcode-project use-profiles
+
           SRC="/Users/builder/export_options.plist"
-          DEST="$EXPORT_PLIST_PATH"
+          DEST="${EXPORT_PLIST_PATH:-$HOME/export_options.plist}"
+
           if [ ! -f "$SRC" ]; then
             echo "ExportOptions.plist não foi gerado. Verifique perfis/capabilities nos Identifiers." >&2
             exit 1
           fi
-          cp -f "$SRC" "$DEST"
+
+          if [ "$SRC" != "$DEST" ]; then
+            cp -f "$SRC" "$DEST"
+            echo "ExportOptions.plist copiado para $DEST"
+          else
+            echo "ExportOptions.plist já está em $DEST (nenhuma cópia necessária)"
+          fi
 
       - name: Diagnóstico bundles no archive
         script: |
