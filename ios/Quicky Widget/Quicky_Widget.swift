@@ -90,9 +90,3 @@ struct Quicky_Widget: Widget {
         .description("Mostra informações do usuário.")
     }
 }
-
-#Preview(as: .systemSmall) {
-    Quicky_Widget()
-} timeline: {
-    UserEntry(date: .now, displayName: "", photoUrl: nil, saldo: "0", nextTask: "", rating: "")
-}
