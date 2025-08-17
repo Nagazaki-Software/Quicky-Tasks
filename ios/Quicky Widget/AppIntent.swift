@@ -20,22 +20,23 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// MARK: - AppIntent com perform() (explicitamente disponível em extensões)
+// MARK: - AppIntent minimalista COM perform() (para satisfazer o protocolo)
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
     static var title: LocalizedStringResource = "Quicky Action"
     static var description = IntentDescription("Executes a simple action for the Quicky widget.")
 
+    // Parâmetro opcional (não precisa retornar valor)
     @Parameter(title: "Message")
     var message: String?
 
-    // Alguns toolchains exigem a disponibilidade no MÉTODO também (além da struct).
+    // Alguns toolchains só ficam felizes se o método TAMBÉM tiver @available explícito.
     @available(iOS 16.0, *)
     @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
-        let output = (message?.isEmpty == false) ? message! : "OK"
-        return .result(value: output)
+        // Não retorna valor, só indica sucesso -> evita exigências de ReturnsValue
+        return .result()
     }
 }
