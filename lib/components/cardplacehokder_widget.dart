@@ -112,10 +112,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     } catch (e) {
       final message = 'Unable to obtain client token: $e';
       debugPrint(message);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
       return;
     }
 
@@ -127,6 +126,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
       );
       if (nonce != null) {
         final result = await _createTransaction(nonce, amount);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result)),
         );
@@ -134,10 +134,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     } catch (e) {
       final message = 'Google Pay error: $e';
       debugPrint(message);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -148,10 +147,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     } catch (e) {
       final message = 'Unable to obtain client token: $e';
       debugPrint(message);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
       return;
     }
 
@@ -165,6 +163,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
       );
       if (nonce != null) {
         final result = await _createTransaction(nonce, amount);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result)),
         );
@@ -172,10 +171,9 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     } catch (e) {
       final message = 'Apple Pay error: $e';
       debugPrint(message);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
