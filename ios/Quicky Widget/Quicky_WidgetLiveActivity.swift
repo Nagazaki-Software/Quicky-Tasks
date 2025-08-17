@@ -5,18 +5,21 @@
 //  Created by Enzo Godoy on 14/08/2025.
 //
 
-import ActivityKit
 import WidgetKit
 import SwiftUI
 
+#if canImport(ActivityKit)
+import ActivityKit
+
+// ActivityKit só em iOS 16.1+ dentro de extensões
 @available(iOSApplicationExtension 16.1, *)
 struct Quicky_WidgetAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
-        // Dynamic stateful properties about your activity go here!
+        // Estado dinâmico da Live Activity
         var emoji: String
     }
 
-    // Fixed non-changing properties about your activity go here!
+    // Propriedades fixas (imutáveis) da Activity
     var name: String
 }
 
@@ -24,7 +27,7 @@ struct Quicky_WidgetAttributes: ActivityAttributes {
 struct Quicky_WidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: Quicky_WidgetAttributes.self) { context in
-            // Lock screen/banner UI goes here
+            // Lock Screen / Banner
             VStack {
                 Text("Hello \(context.state.emoji)")
             }
@@ -33,8 +36,7 @@ struct Quicky_WidgetLiveActivity: Widget {
 
         } dynamicIsland: { context in
             DynamicIsland {
-                // Expanded UI goes here.  Compose the expanded UI through
-                // various regions, like leading/trailing/center/bottom
+                // UI expandida (leading/center/trailing/bottom)
                 DynamicIslandExpandedRegion(.leading) {
                     Text("Leading")
                 }
@@ -43,7 +45,6 @@ struct Quicky_WidgetLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text("Bottom \(context.state.emoji)")
-                    // more content
                 }
             } compactLeading: {
                 Text("L")
@@ -52,12 +53,14 @@ struct Quicky_WidgetLiveActivity: Widget {
             } minimal: {
                 Text(context.state.emoji)
             }
-            .widgetURL(URL(string: "http://www.apple.com"))
+            // Use HTTPS pra evitar bloqueio de ATS
+            .widgetURL(URL(string: "https://www.apple.com"))
             .keylineTint(Color.red)
         }
     }
 }
 
+// MARK: - Previews (Xcode Canvas)
 @available(iOSApplicationExtension 16.1, *)
 extension Quicky_WidgetAttributes {
     fileprivate static var preview: Quicky_WidgetAttributes {
@@ -69,9 +72,10 @@ extension Quicky_WidgetAttributes {
 extension Quicky_WidgetAttributes.ContentState {
     fileprivate static var smiley: Quicky_WidgetAttributes.ContentState {
         Quicky_WidgetAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: Quicky_WidgetAttributes.ContentState {
-         Quicky_WidgetAttributes.ContentState(emoji: "🤩")
-     }
+    }
+    fileprivate static var starEyes: Quicky_WidgetAttributes.ContentState {
+        Quicky_WidgetAttributes.ContentState(emoji: "🤩")
+    }
 }
+
+#endif // canImport(ActivityKit)
