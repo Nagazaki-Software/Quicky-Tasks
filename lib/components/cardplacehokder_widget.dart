@@ -222,7 +222,7 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
     _model.textFieldFocusNode10 ??= FocusNode();
 
     _model.textController11 ??= TextEditingController();
-    _model.textFieldFocusNode11 ??= FocusNode()
+    _model.textFieldFocusNode11 ??= FocusNode();
     _model.textController1Validator = (context, value) {
       if (value == null || value.isEmpty) {
         return 'Enter card number';
