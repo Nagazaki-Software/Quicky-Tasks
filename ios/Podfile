@@ -1,6 +1,6 @@
 # ios/Podfile
 source 'https://cdn.cocoapods.org/'
-platform :ios, '14.0'
+platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
@@ -34,7 +34,7 @@ post_install do |installer|
   installer.pods_project.targets.each do |t|
     flutter_additional_ios_build_settings(t)
     t.build_configurations.each do |c|
-      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       c.build_settings['SWIFT_VERSION'] = '5.0'
       c.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
