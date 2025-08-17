@@ -94,9 +94,14 @@ class _CardplacehokderWidgetState extends State<CardplacehokderWidget> {
       return data['message']?.toString() ??
           'Pagamento realizado com sucesso!';
     } else {
-      final err = jsonDecode(response.body) as Map<String, dynamic>;
-      final msg = (err['message'] ?? err['error'] ?? response.body).toString();
-      throw Exception('Erro no pagamento: $msg');
+      try {
+        final err = jsonDecode(response.body) as Map<String, dynamic>;
+        final msg = (err['message'] ?? err['error'] ?? response.body).toString();
+        throw Exception('Erro no pagamento: $msg');
+      } on FormatException {
+        debugPrint('Invalid error response from server: ${response.body}');
+        throw Exception('Invalid error response from server');
+      }
     }
   }
 
