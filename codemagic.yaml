@@ -189,7 +189,6 @@ workflows:
       - name: Diagnóstico bundles no archive
         script: |
           set -euo pipefail
-          # Procura um .xcarchive (se ainda não existir, só pula)
           ARCHIVE_DIR="$(/usr/bin/find build -type d -name '*.xcarchive' -print -quit || true)"
           if [ -z "${ARCHIVE_DIR:-}" ]; then
             echo "Nenhum .xcarchive encontrado ainda (este step roda antes do build). Pulando diagnóstico."
@@ -211,9 +210,35 @@ workflows:
           set -euo pipefail
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
-          flutter build ipa --release \
-            --build-number=$FLUTTER_BUILD_NUMBER \
-            --export-options-plist="$EXPORT_PLIST_PATH"
+
+          LOG_DIR="build/logs"
+          mkdir -p "$LOG_DIR"
+          BUILD_LOG="$LOG_DIR/flutter_build_ipa.log"
+
+          # Executa com log VERBOSO e captura status
+          set +e
+          flutter build ipa --release -v \
+            --build-number="$FLUTTER_BUILD_NUMBER" \
+            --export-options-plist="$EXPORT_PLIST_PATH" \
+            2>&1 | tee "$BUILD_LOG"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+
+          if [ $STATUS -ne 0 ]; then
+            echo ""
+            echo "===== RESUMO DE ERROS PROVÁVEIS (grep no log) ====="
+            grep -nE "error:|No profiles|provisioning profile|Code ?sign|codesign|entitlement|ARCHIVE FAILED|The operation couldn’t be completed" "$BUILD_LOG" || true
+
+            echo ""
+            echo "===== ÚLTIMAS 300 LINHAS DO LOG ====="
+            tail -n 300 "$BUILD_LOG" || true
+
+            echo ""
+            echo "Log completo salvo em: $BUILD_LOG"
+            exit $STATUS
+          fi
+
+          echo "Build OK. Log completo em: $BUILD_LOG"
 
       - name: Upload para App Store Connect (TestFlight)
         script: |
