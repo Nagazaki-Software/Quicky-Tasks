@@ -205,6 +205,7 @@ workflows:
             /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$P" 2>/dev/null || true
           done
 
+      # >>> Step de build com diagnóstico turbo <<<
       - name: Build IPA assinado (Release)
         script: |
           set -euo pipefail
@@ -215,7 +216,6 @@ workflows:
           mkdir -p "$LOG_DIR"
           BUILD_LOG="$LOG_DIR/flutter_build_ipa.log"
 
-          # Executa com log VERBOSO e captura status
           set +e
           flutter build ipa --release -v \
             --build-number="$FLUTTER_BUILD_NUMBER" \
@@ -226,12 +226,25 @@ workflows:
 
           if [ $STATUS -ne 0 ]; then
             echo ""
-            echo "===== RESUMO DE ERROS PROVÁVEIS (grep no log) ====="
-            grep -nE "error:|No profiles|provisioning profile|Code ?sign|codesign|entitlement|ARCHIVE FAILED|The operation couldn’t be completed" "$BUILD_LOG" || true
+            echo "===== RESUMO DE ERROS (grep em padrões ampliados) ====="
+            GREP_PAT='error:|fatal error:|Swift( Compiler)? Error|clang: error|ld: (symbol|library|file|warning|error)|Undefined symbols for architecture|Command .* failed with a nonzero exit code|No profiles|provisioning profile|Code ?sign|codesign|entitlement|ARCHIVE FAILED|The operation couldn.t be completed|PhaseScriptExecution failed'
+            grep -nE "$GREP_PAT" "$BUILD_LOG" || true
 
             echo ""
-            echo "===== ÚLTIMAS 300 LINHAS DO LOG ====="
-            tail -n 300 "$BUILD_LOG" || true
+            echo "===== DUMP DE BUILD SETTINGS (Runner) ====="
+            xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings | tee "$LOG_DIR/showBuildSettings.txt" || true
+
+            echo ""
+            echo "===== TENTATIVA DE EXTRAIR .xcactivitylog ====="
+            ACTLOG_DIR="$HOME/Library/Developer/Xcode/DerivedData"
+            find "$ACTLOG_DIR" -name "*.xcactivitylog" -type f | tail -n 3 | while read -r f; do
+              echo "--- strings $f | grep -E \"$GREP_PAT\" ---"
+              strings "$f" | grep -E "$GREP_PAT" || true
+            done
+
+            echo ""
+            echo "===== ÚLTIMAS 500 LINHAS DO LOG ====="
+            tail -n 500 "$BUILD_LOG" || true
 
             echo ""
             echo "Log completo salvo em: $BUILD_LOG"
@@ -274,3 +287,5 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
+      - build/logs/**/*.log
+      - build/logs/**/*.txt
