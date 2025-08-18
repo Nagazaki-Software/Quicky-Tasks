@@ -1,7 +1,6 @@
 import WidgetKit
 import SwiftUI
 
-// MARK: - Entry
 struct UserEntry: TimelineEntry {
     let date: Date
     let displayName: String
@@ -11,79 +10,68 @@ struct UserEntry: TimelineEntry {
     let rating: String
 }
 
-// MARK: - Provider
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> UserEntry {
         UserEntry(date: Date(), displayName: "", photoUrl: nil, saldo: "0", nextTask: "", rating: "")
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (UserEntry) -> Void) {
+    func getSnapshot(in context: Context, completion: @escaping (UserEntry) -> ()) {
         completion(loadEntry())
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<UserEntry>) -> Void) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<UserEntry>) -> ()) {
         let entry = loadEntry()
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
     }
 
     private func loadEntry() -> UserEntry {
-        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick") // <- seu App Group
+        // ATENÇÃO: use seu App Group correto
+        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick")
         let displayName = defaults?.string(forKey: "display_name") ?? ""
         let photoUrl = defaults?.string(forKey: "photo_url").flatMap { URL(string: $0) }
         let saldo = defaults?.string(forKey: "saldo") ?? ""
         let nextTask = defaults?.string(forKey: "nexttask") ?? ""
         let rating = defaults?.string(forKey: "rating") ?? ""
-        return UserEntry(date: Date(), displayName: displayName, photoUrl: photoUrl, saldo: saldo, nextTask: nextTask, rating: rating)
+        return UserEntry(
+            date: Date(),
+            displayName: displayName,
+            photoUrl: photoUrl,
+            saldo: saldo,
+            nextTask: nextTask,
+            rating: rating
+        )
     }
 }
 
-// MARK: - View
 struct Quicky_WidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        // Deixa o WIDGET inteiro clicável, abrindo o app via deep link
-        Link(destination: URL(string: "quicky://open")!) {
-            HStack(alignment: .center) {
-                if let url = entry.photoUrl {
-                    AsyncImage(url: url) { image in
-                        image.resizable()
-                    } placeholder: {
-                        Color.gray
-                    }
-                    .frame(width: 48, height: 48)
-                    .clipShape(Circle())
+        HStack(alignment: .center) {
+            if let url = entry.photoUrl {
+                // AsyncImage está disponível no iOS 15+. Como seu target é iOS 16, ok.
+                AsyncImage(url: url) { image in
+                    image.resizable()
+                } placeholder: {
+                    Color.gray
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.displayName).font(.headline)
-                    Text("Saldo: \(entry.saldo)").font(.caption)
-                    Text("Próxima tarefa: \(entry.nextTask)").font(.caption2)
-                    Text("Rating: \(entry.rating)").font(.caption2)
-                }
-                Spacer(minLength: 0)
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
             }
-            .padding()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName).font(.headline)
+                Text("Saldo: \(entry.saldo)").font(.caption)
+                Text("Próxima tarefa: \(entry.nextTask)").font(.caption2)
+                Text("Rating: \(entry.rating)").font(.caption2)
+            }
         }
-        // iOS 17+: usa containerBackground
-        .modifier(WidgetBackgroundCompat())
+        .padding()
+        // iOS 14–16: toque no widget abre o app via URL Scheme
+        .widgetURL(URL(string: "quicky://open"))
     }
 }
 
-// Compat: iOS 16 não tem containerBackground(for:.widget)
-private struct WidgetBackgroundCompat: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOSApplicationExtension 17.0, *) {
-            content
-                .containerBackground(for: .widget) { Color.clear }
-        } else {
-            content
-                .background(Color.clear)
-        }
-    }
-}
-
-// MARK: - Widget
 struct Quicky_Widget: Widget {
     let kind: String = "Quicky_Widget"
 
@@ -93,6 +81,5 @@ struct Quicky_Widget: Widget {
         }
         .configurationDisplayName("Quicky")
         .description("Mostra informações do usuário.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
