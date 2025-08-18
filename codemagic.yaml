@@ -119,7 +119,7 @@ workflows:
             use_frameworks! :linkage => :dynamic
           end
 
-          # Widget NÃO é alvo de pods (target chama "Quicky WidgetExtension")
+          # Widget NÃO é alvo de pods (o target chama "Quicky WidgetExtension")
 
           post_install do |installer|
             def append_unique(bs, key, extra)
@@ -299,27 +299,27 @@ workflows:
             echo "Usando xcresult: $RES"
             xcrun xcresulttool get --format json --path "$RES" > xcresult.json || true
             echo "==== Primeiros erros extraídos ===="
-            python3 - <<'PY'
-import json, sys, re
-try:
-    data=json.load(open('xcresult.json'))
-except Exception as e:
-    print("Falha lendo xcresult.json:",e); sys.exit(0)
-def walk(obj):
-    if isinstance(obj, dict):
-        for k,v in obj.items():
-            if k=='issueSummaries' or k=='warningSummaries':
-                for it in v.get('_values',[]):
-                    msg = it.get('message',{}).get('_value','')
-                    typ = it.get('issueType',{}).get('_value','')
-                    if 'error' in typ.lower() or 'Swift' in typ or 'Uncategorized' in typ:
-                        print('--- ISSUE ---')
-                        print(typ,':',msg)
-            walk(v)
-    elif isinstance(obj, list):
-        for x in obj: walk(x)
-walk(data)
-PY
+            python3 - <<-'PY'
+            	import json, sys, re
+            	try:
+            		data=json.load(open('xcresult.json'))
+            	except Exception as e:
+            		print("Falha lendo xcresult.json:", e); sys.exit(0)
+            	def walk(obj):
+            		if isinstance(obj, dict):
+            			for k,v in obj.items():
+            				if k=='issueSummaries' or k=='warningSummaries':
+            					for it in v.get('_values',[]):
+            						msg = it.get('message',{}).get('_value','')
+            						typ = it.get('issueType',{}).get('_value','')
+            						if 'error' in typ.lower() or 'Swift' in typ or 'Uncategorized' in typ:
+            							print('--- ISSUE ---')
+            							print(typ,':',msg)
+            				walk(v)
+            		elif isinstance(obj, list):
+            			for x in obj: walk(x)
+            	walk(data)
+            PY
             echo "==== Grep direto no xcresult (strings) ===="
             strings "$RES" | grep -nE "error: |Swift(EmitModule|Compile)|no such module|cannot find|failed to emit|undeclared|unavailable" | head -n 80 || true
           else
