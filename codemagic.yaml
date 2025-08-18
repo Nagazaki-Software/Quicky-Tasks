@@ -47,6 +47,22 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
+      # >>> NOVO: garante que o Runner tem Swift habilitado <<<
+      - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
+        script: |
+          set -euo pipefail
+          mkdir -p ios/Runner
+          SWIFT_FILE="ios/Runner/SwiftDummy.swift"
+          if [ ! -f "$SWIFT_FILE" ]; then
+            cat > "$SWIFT_FILE" <<'SWIFT'
+            import Foundation
+            // Mantém o target Runner com suporte a Swift para gerar headers -Swift.h dos plugins
+            SWIFT
+            echo "Criado $SWIFT_FILE"
+          else
+            echo "Já existe $SWIFT_FILE"
+          fi
+
       - name: Escrever/Atualizar Podfile (libs estáticas + modular headers seletivos)
         script: |
           set -euo pipefail
@@ -80,7 +96,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # Sem use_frameworks! e sem use_modular_headers! global (evita conflito com grpc)
+          # Sem use_frameworks! e sem use_modular_headers! global (evita conflito com gRPC)
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
@@ -91,11 +107,8 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # ===== Modular headers exigidos pelo validator =====
-            # DKPhotoGallery -> SDWebImage
+            # ===== Modular headers exigidos pelo validator (Firebase + SDWebImage etc.) =====
             pod 'SDWebImage',               :modular_headers => true
-
-            # Firebase "núcleo" e utilitários
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
             pod 'FirebaseCoreInternal',     :modular_headers => true
@@ -104,13 +117,11 @@ workflows:
             pod 'FirebaseInstallations',    :modular_headers => true
             pod 'nanopb',                   :modular_headers => true
 
-            # Interops/recaptcha/app check/messaging (pedidos pelo validator)
             pod 'FirebaseAuthInterop',      :modular_headers => true
             pod 'FirebaseAppCheckInterop',  :modular_headers => true
             pod 'FirebaseMessagingInterop', :modular_headers => true
             pod 'RecaptchaInterop',         :modular_headers => true
 
-            # Produtos Firebase Swift que dependem dos acima
             pod 'FirebaseAuth',             :modular_headers => true
             pod 'FirebaseFirestore',        :modular_headers => true
             pod 'FirebaseFirestoreInternal',:modular_headers => true
@@ -127,12 +138,19 @@ workflows:
           end
 
           post_install do |installer|
+            # Garante Swift em todos os targets (inclui Runner e Pods)
             installer.pods_project.targets.each do |t|
-              flutter_additional_ios_build_settings(t)
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                 c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+                c.build_settings['SWIFT_VERSION'] = '5.0'
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+              end
+            end
+            # Também garante SWIFT_VERSION no próprio projeto Runner
+            installer.aggregate_targets.each do |aggregate_target|
+              aggregate_target.user_project.build_configurations.each do |config|
+                config.build_settings['SWIFT_VERSION'] = '5.0'
               end
             end
           end
