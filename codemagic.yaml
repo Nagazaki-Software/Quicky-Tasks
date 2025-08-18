@@ -47,21 +47,26 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      # >>> NOVO: garante que o Runner tem Swift habilitado <<<
+      # >>> CORRIGIDO: Heredoc sem erro e sem indentação no marcador <<<
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
           mkdir -p ios/Runner
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
           if [ ! -f "$SWIFT_FILE" ]; then
-            cat > "$SWIFT_FILE" <<'SWIFT'
-            import Foundation
-            // Mantém o target Runner com suporte a Swift para gerar headers -Swift.h dos plugins
-            SWIFT
+          cat > "$SWIFT_FILE" <<'SWIFT'
+          import Foundation
+
+          // Mantém o target Runner com suporte a Swift para gerar headers -Swift.h dos plugins
+          @objc class SwiftDummy: NSObject {}
+          SWIFT
             echo "Criado $SWIFT_FILE"
           else
             echo "Já existe $SWIFT_FILE"
           fi
+          # Mostra conteúdo (debug)
+          echo "==== Conteúdo de $SWIFT_FILE ===="
+          sed -n '1,50p' "$SWIFT_FILE" || true
 
       - name: Escrever/Atualizar Podfile (libs estáticas + modular headers seletivos)
         script: |
@@ -107,8 +112,9 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # ===== Modular headers exigidos pelo validator (Firebase + SDWebImage etc.) =====
+            # ===== Modular headers exigidos pelo validator =====
             pod 'SDWebImage',               :modular_headers => true
+
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
             pod 'FirebaseCoreInternal',     :modular_headers => true
@@ -138,7 +144,6 @@ workflows:
           end
 
           post_install do |installer|
-            # Garante Swift em todos os targets (inclui Runner e Pods)
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
@@ -147,7 +152,7 @@ workflows:
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
               end
             end
-            # Também garante SWIFT_VERSION no próprio projeto Runner
+            # Garante SWIFT_VERSION também no projeto do Runner
             installer.aggregate_targets.each do |aggregate_target|
               aggregate_target.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -291,7 +296,7 @@ workflows:
             for f in $ACTLOGS; do
               echo "--- Arquivo: $f ---"
               line=$(strings "$f" | grep -nE "error:|Swift Compiler Error|fatal error" | head -n 1 | cut -d: -f1 || true)
-              if [ -n "$line" ]; then
+              if [ -n "$line" ]; então
                 echo "Contexto (±80):"
                 start=$((line-80)); [ $start -lt 1 ] && start=1
                 end=$((line+80))
@@ -320,7 +325,7 @@ workflows:
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
-            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEYID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           ls -l ~/.private_keys/ || true
