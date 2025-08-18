@@ -116,7 +116,6 @@ struct Quicky_WidgetEntryView: View {
     }
 }
 
-@main
 struct Quicky_Widget: Widget {
     let kind: String = "Quicky_Widget"
 
