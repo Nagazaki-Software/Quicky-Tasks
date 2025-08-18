@@ -3,9 +3,8 @@ workflows:
     name: iOS Release (App Store Connect)
     environment:
       flutter: stable
-      xcode: latest            # se quiser fixar: 16.4
+      xcode: latest            # opcional: fixe p.ex. 16.4
       vars:
-        EXPORT_PLIST_PATH: $HOME/export_options.plist
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
         EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
@@ -48,7 +47,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (sem use_frameworks!, sem modular_headers global)
+      - name: Escrever/Atualizar Podfile (static libs + modular headers seletivos)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -81,21 +80,43 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # ⚠️ Sem use_frameworks! e sem use_modular_headers! global
-          # (Deixe CocoaPods gerar libs estáticas; é o fluxo saudável p/ Flutter/Firestore)
+          # Sem use_frameworks! (libs estáticas) — evita "non-modular include" no Firestore
 
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (ok com libs estáticas)
+            # Braintree
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
+
+            # ==== Modular headers exigidos pelo validator do CocoaPods ====
+            pod 'SDWebImage',               :modular_headers => true
+            pod 'FirebaseCore',             :modular_headers => true
+            pod 'FirebaseCoreExtension',    :modular_headers => true
+            pod 'FirebaseCoreInternal',     :modular_headers => true
+            pod 'GoogleUtilities',          :modular_headers => true
+            pod 'FirebaseInstallations',    :modular_headers => true
+            pod 'GoogleDataTransport',      :modular_headers => true
+            pod 'nanopb',                   :modular_headers => true
+
+            pod 'FirebaseAuth',             :modular_headers => true
+            pod 'FirebaseAuthInterop',      :modular_headers => true
+            pod 'RecaptchaInterop',         :modular_headers => true
+            pod 'FirebaseAppCheckInterop',  :modular_headers => true
+            pod 'FirebaseMessagingInterop', :modular_headers => true
+
+            pod 'FirebaseFirestore',        :modular_headers => true
+            pod 'FirebaseFirestoreInternal',:modular_headers => true
+            pod 'FirebaseFunctions',        :modular_headers => true
+            pod 'FirebaseRemoteConfig',     :modular_headers => true
+            pod 'FirebaseSessions',         :modular_headers => true
+            pod 'FirebaseStorage',          :modular_headers => true
           end
 
-          # Extensão de notificação — sem pods; mantém independente
+          # Extensão sem pods (mantém independente)
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -175,7 +196,7 @@ workflows:
       - name: Gerar ExportOptions.plist (App Store)
         script: |
           set -euo pipefail
-          DEST="$EXPORT_PLIST_PATH"
+          DEST="$CM_BUILD_DIR/export_options.plist"
           /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
 
           /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
@@ -219,7 +240,7 @@ workflows:
           set +e
           flutter build ipa --release \
             --build-number="$FLUTTER_BUILD_NUMBER" \
-            --export-options-plist="$EXPORT_PLIST_PATH" -v \
+            --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
             | tee build_logs/flutter_build_verbose.log
           status=${PIPESTATUS[0]}
           set -e
