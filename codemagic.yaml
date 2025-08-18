@@ -7,10 +7,10 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
-        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
       groups:
-        - appstore_credentials
-        - ios_signing_files
+        - appstore_credentials        # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
+        - ios_signing_files           # IOS_DISTRIBUTION_CERT (base64 .p12) e CERTIFICATE_PASSWORD
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -23,7 +23,7 @@ workflows:
           set -euo pipefail
           flutter --version && xcodebuild -version
           which ruby || true; ruby -v || true
-          which pod || true; pod --version || true
+          which pod  || true; pod --version || true
 
       - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
         script: |
@@ -50,12 +50,19 @@ workflows:
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
+          mkdir -p ios/Runner
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
-          mkdir -p "$(dirname "$SWIFT_FILE")"
-          printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
-          echo "Escrevi $SWIFT_FILE"
+          if [ ! -f "$SWIFT_FILE" ]; then
+            /usr/bin/env bash -lc 'cat > ios/Runner/SwiftDummy.swift <<'"'"'SWIFT'"'"'
+          import Foundation
+          @objc class SwiftDummy: NSObject {}
+          SWIFT'
+            echo "Criado $SWIFT_FILE"
+          else
+            echo "Já existe $SWIFT_FILE"
+          fi
 
-      - name: Escrever/Atualizar Podfile (Flutter visível + frameworks dinâmicos + modular headers)
+      - name: Escrever/Atualizar Podfile (estático + módulos seletivos)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -75,9 +82,6 @@ workflows:
             'Release' => :release,
           }
 
-          # Precisamos de modules para pods Swift (Firebase etc.)
-          use_modular_headers!
-
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
             raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
@@ -91,39 +95,55 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
+          # App principal
           target 'Runner' do
-            # Frameworks DINÂMICOS (expõe o módulo Flutter p/ plugins ObjC/Swift)
-            use_frameworks! :linkage => :dynamic
-
-            # 🔑 PREGAR o pod Flutter (resolve 'Flutter/Flutter.h' not found)
-            pod 'Flutter', :path => 'Flutter'
-
-            # Instala todos os pods do Flutter (plugins, etc.)
+            # NADA de use_frameworks! (pods estáticos, fluxo padrão do Flutter)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree
+            # Braintree (ok com estático)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
+
+            # 🔧 Cabeças modulares apenas onde o validador exige
+            pod 'SDWebImage',               :modular_headers => true
+
+            pod 'FirebaseABTesting',        :modular_headers => true
+            pod 'FirebaseCore',             :modular_headers => true
+            pod 'FirebaseCoreExtension',    :modular_headers => true
+            pod 'FirebaseCoreInternal',     :modular_headers => true
+            pod 'FirebaseInstallations',    :modular_headers => true
+            pod 'GoogleUtilities',          :modular_headers => true
+            pod 'GoogleDataTransport',      :modular_headers => true
+            pod 'nanopb',                   :modular_headers => true
+
+            pod 'FirebaseAuth',             :modular_headers => true
+            pod 'FirebaseAuthInterop',      :modular_headers => true
+            pod 'FirebaseAppCheckInterop',  :modular_headers => true
+            pod 'FirebaseMessagingInterop', :modular_headers => true
+            pod 'RecaptchaInterop',         :modular_headers => true
+
+            pod 'FirebaseFirestore',         :modular_headers => true
+            pod 'FirebaseFirestoreInternal', :modular_headers => true
+            pod 'FirebaseFunctions',         :modular_headers => true
+            pod 'FirebaseRemoteConfig',      :modular_headers => true
+            pod 'FirebaseSessions',          :modular_headers => true
+            pod 'FirebaseStorage',           :modular_headers => true
           end
 
-          # Extensão de notificação (não tem pods próprios; herda search paths)
+          # Extensão de notificação SEM pods (independente)
           target 'ImageNotification' do
             inherit! :search_paths
-            use_frameworks! :linkage => :dynamic
+            # nada de use_frameworks! aqui também
           end
-
-          # Widget NÃO entra em pods (target chama "Quicky WidgetExtension")
 
           post_install do |installer|
             def append_unique(bs, key, extra)
               val = bs[key] || '$(inherited)'
               s = val.to_s
-              unless s.include?(extra)
-                bs[key] = s + ' ' + extra
-              end
+              bs[key] = (s.include?(extra) ? s : (s + ' ' + extra))
             end
 
             installer.pods_project.targets.each do |t|
@@ -135,21 +155,11 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Expor módulos p/ Swift & compat binária
-                bs['DEFINES_MODULE'] = 'YES'
-                bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-                bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-
-                # 👉 Headers do Flutter para #import <Flutter/Flutter.h>
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Flutter/Flutter.xcframework/Headers"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Flutter/Headers"')
-
-                # E headers públicos/módulos dos pods
+                # 🔑 Garantir headers do Flutter para plugins ObjC:
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
 
-                # -ObjC evita símbolos perdidos
+                # -ObjC ajuda a evitar símbolos perdidos
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
 
                 if t.name == 'ImageNotification'
@@ -158,12 +168,10 @@ workflows:
               end
             end
 
-            # Ajustes no projeto do Runner (agregado)
+            # Também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
-                config.build_settings['DEFINES_MODULE'] = 'YES'
-                config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
               end
             end
           end
@@ -197,9 +205,10 @@ workflows:
           set -euo pipefail
           source $CM_ENV || true
           cd ios
-          pod --version
           pod repo update
           pod install --verbose
+          # 🚨 Falha cedo se cabeçalho do Flutter não existir
+          test -f "Pods/Headers/Public/Flutter/Flutter.h" || { echo "ERRO: Flutter.h não encontrado após pod install"; ls -R Pods/Headers/Public | sed -n '1,120p'; exit 1; }
           cd ..
 
       - name: Importar certificado no keychain (sem interação)
@@ -286,48 +295,12 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build PRO (decodifica .xcresult com arquivo/linha)
+      - name: Diagnóstico pós-build (erros claros)
         script: |
           set -euo pipefail
-          echo "==== Procurando último .xcresult ===="
-          RES=$(find build -type d -name "*.xcresult" -print | tail -n 1 || true)
-          if [ -z "${RES:-}" ]; then
-            RES=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name "*.xcresult" -print | tail -n 1 || true)
-          fi
-          if [ -n "${RES:-}" ]; then
-            echo "Usando xcresult: $RES"
-            xcrun xcresulttool get --format json --path "$RES" > xcresult.json || true
-            echo "==== Primeiros erros extraídos ===="
-            python3 - <<-'PY'
-            	import json, sys, re
-            	try:
-            		data=json.load(open('xcresult.json'))
-            	except Exception as e:
-            		print("Falha lendo xcresult.json:", e); sys.exit(0)
-            	def walk(obj):
-            		if isinstance(obj, dict):
-            			for k,v in obj.items():
-            				if k=='issueSummaries' or k=='warningSummaries':
-            					for it in v.get('_values',[]):
-            						msg = it.get('message',{}).get('_value','')
-            						typ = it.get('issueType',{}).get('_value','')
-            						if 'error' in typ.lower() or 'Swift' in typ or 'Uncategorized' in typ:
-            							print('--- ISSUE ---')
-            							print(typ,':',msg)
-            				walk(v)
-            		elif isinstance(obj, list):
-            			for x in obj: walk(x)
-            	walk(data)
-            PY
-            echo "==== Grep direto no xcresult (strings) ===="
-            strings "$RES" | grep -nE "error: |Swift(EmitModule|Compile)|no such module|cannot find|failed to emit|undeclared|unavailable" | head -n 80 || true
-          else
-            echo "Nenhum .xcresult encontrado."
-          fi
-
           echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            grep -nE "error:|Swift Compiler Error|failed to emit|no such module|fatal error:|note:" build_logs/flutter_build_verbose.log | head -n 120 || true
+            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|fatal error" build_logs/flutter_build_verbose.log | head -n 120 || true
           else
             echo "Log build_logs/flutter_build_verbose.log não encontrado."
           fi
@@ -366,4 +339,3 @@ workflows:
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
       - build_logs/flutter_build_verbose.log
-      - xcresult.json
