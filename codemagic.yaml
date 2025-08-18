@@ -25,19 +25,13 @@ workflows:
       - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
         script: |
           set -euo pipefail
-
-          # Instala gems no diretório do usuário usando o Ruby do sistema
           export GEM_HOME="$HOME/.gem"
           export GEM_BIN="$GEM_HOME/bin"
           export PATH="$GEM_BIN:$PATH"
-
           /usr/bin/gem install cocoapods -v 1.16.2 -N || true
-
-          # Persiste para os próximos steps
           echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
           echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-
           which ruby
           ruby -v
           which gem
@@ -175,23 +169,58 @@ workflows:
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
             --type IOS_APP_STORE --create --verbose || true
 
-      - name: Aplicar perfis ao projeto e gerar ExportOptions
+      - name: Aplicar perfis ao projeto
         script: |
           set -euo pipefail
           xcode-project use-profiles
-          SRC="/Users/builder/export_options.plist"
-          DEST="$EXPORT_PLIST_PATH"
-          if [ -f "$SRC" ] && [ "$SRC" != "$DEST" ]; then cp "$SRC" "$DEST"; fi
-          test -f "$DEST" || test -f "$SRC"
 
-      # ======= ALTERAÇÃO 1: build em modo verbose e log salvo =======
+      # >>> NOVO: gera ExportOptions.plist de forma determinística <<<
+      - name: Gerar ExportOptions.plist (App Store)
+        script: |
+          set -euo pipefail
+          DEST="$EXPORT_PLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
+
+          /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
+
+          # Mapa de perfis por bundle id – usa nomes dos perfis gerados pela Codemagic
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
+
+          # App
+          APP_BUNDLE_ID="com.nagazakisoftware.quick"
+          APP_PROFILE_NAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+            | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
+            | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
+            | grep -m1 "$APP_BUNDLE_ID" -B1 | head -n1 || true)
+          if [ -n "$APP_PROFILE_NAME" ]; then
+            /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
+          fi
+
+          # Extensões (adiciona só se achar perfil)
+          for BID in "com.nagazakisoftware.quick.ImageNotification" "com.nagazakisoftware.quick.Quicky-Widget"; do
+            PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
+              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
+              | grep -m1 "$BID" -B1 | head -n1 || true)
+            if [ -n "$PNAME" ]; then
+              /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
+            fi
+          done
+
+          echo "=== ExportOptions.plist ==="
+          /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
+
+      # ======= build com log salvo =======
       - name: Build IPA assinado (Release)
         script: |
           set -euo pipefail
           mkdir -p build_logs
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
-          # salva log verbose e preserva o exit code do flutter
           set +e
           flutter build ipa --release \
             --build-number="$FLUTTER_BUILD_NUMBER" \
@@ -201,7 +230,6 @@ workflows:
           set -e
           exit $status
 
-      # ======= ALTERAÇÃO 2: diagnóstico do erro real =======
       - name: Diagnóstico pós-build (pegar o erro real)
         script: |
           set -euo pipefail
@@ -252,7 +280,6 @@ workflows:
           mkdir -p ~/.private_keys
           KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
 
-          # Se for PEM (-----BEGIN ...-----) grava direto; se for base64, decodifica
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
