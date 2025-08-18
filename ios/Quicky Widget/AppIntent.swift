@@ -5,15 +5,14 @@
 //  Created by Enzo Godoy on 14/08/2025.
 //
 
-// Compile este arquivo SOMENTE quando estiver construindo a Widget Extension.
-// O Xcode define WIDGET_EXTENSION para targets de extensão.
-#if canImport(WidgetKit) && canImport(AppIntents) && WIDGET_EXTENSION
+#if canImport(WidgetKit) && canImport(AppIntents)
 
 import Foundation
 import WidgetKit
 import AppIntents
 
-// MARK: - Intent de configuração do Widget (não precisa de perform())
+// MARK: - Intent de configuração do Widget
+// Disponível em iOS 16.0+ e seguro para extensão.
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
@@ -24,7 +23,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// MARK: - AppIntent com perform() (disponível para extensões)
+// MARK: - AppIntent com perform() (extension-safe)
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
@@ -34,12 +33,13 @@ struct QuickyActionIntent: AppIntent {
     @Parameter(title: "Message")
     var message: String?
 
-    // Alguns toolchains exigem a disponibilidade no MÉTODO também.
+    // Alguns toolchains pedem a disponibilidade também no método.
     @available(iOS 16.0, *)
     @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
-        return .result() // retorno vazio é o mais compatível
+        // Sua lógica aqui (não use APIs proibidas em extensão)
+        return .result()
     }
 }
 
