@@ -3,14 +3,14 @@ workflows:
     name: iOS Release (App Store Connect)
     environment:
       flutter: stable
-      xcode: latest            # opcional: fixe p.ex. 16.4
+      xcode: latest
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
         EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
       groups:
-        - appstore_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
-        - ios_signing_files      # IOS_DISTRIBUTION_CERT (base64 do .p12) e CERTIFICATE_PASSWORD
+        - appstore_credentials
+        - ios_signing_files
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -47,7 +47,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (static libs + modular header só no ABTesting)
+      - name: Escrever/Atualizar Podfile (libs estáticas + modular headers seletivos)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -80,8 +80,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # Sem use_frameworks! (libs estáticas) — evita "non-modular include" no Firestore
-
+          # Sem use_frameworks! e sem use_modular_headers! global (evita conflito com grpc)
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
@@ -92,11 +91,37 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # 🔑 Modularize só o que o validator pediu:
-            pod 'FirebaseABTesting', :modular_headers => true
+            # ===== Modular headers exigidos pelo validator =====
+            # DKPhotoGallery -> SDWebImage
+            pod 'SDWebImage',               :modular_headers => true
+
+            # Firebase "núcleo" e utilitários
+            pod 'FirebaseCore',             :modular_headers => true
+            pod 'FirebaseCoreExtension',    :modular_headers => true
+            pod 'FirebaseCoreInternal',     :modular_headers => true
+            pod 'GoogleUtilities',          :modular_headers => true
+            pod 'GoogleDataTransport',      :modular_headers => true
+            pod 'FirebaseInstallations',    :modular_headers => true
+            pod 'nanopb',                   :modular_headers => true
+
+            # Interops/recaptcha/app check/messaging (pedidos pelo validator)
+            pod 'FirebaseAuthInterop',      :modular_headers => true
+            pod 'FirebaseAppCheckInterop',  :modular_headers => true
+            pod 'FirebaseMessagingInterop', :modular_headers => true
+            pod 'RecaptchaInterop',         :modular_headers => true
+
+            # Produtos Firebase Swift que dependem dos acima
+            pod 'FirebaseAuth',             :modular_headers => true
+            pod 'FirebaseFirestore',        :modular_headers => true
+            pod 'FirebaseFirestoreInternal',:modular_headers => true
+            pod 'FirebaseFunctions',        :modular_headers => true
+            pod 'FirebaseRemoteConfig',     :modular_headers => true
+            pod 'FirebaseSessions',         :modular_headers => true
+            pod 'FirebaseStorage',          :modular_headers => true
+            pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # Extensão sem pods (mantém independente)
+          # Extensão sem pods (independente do Firebase)
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -178,13 +203,11 @@ workflows:
           set -euo pipefail
           DEST="$CM_BUILD_DIR/export_options.plist"
           /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
-
           /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
           /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
           /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
           /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
-
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
 
           # App
@@ -196,7 +219,7 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensões (adiciona se achar perfil)
+          # Extensões (se houver perfil correspondente)
           for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
             [ -n "$BID" ] || continue
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
