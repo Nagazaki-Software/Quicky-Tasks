@@ -7,7 +7,7 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
-        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional (apenas perfis)
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional (só p/ perfis)
       groups:
         - appstore_credentials
         - ios_signing_files
@@ -62,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (inclui paths de includes dos plugins)
+      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + módulos)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -96,7 +96,9 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            use_frameworks! :linkage => :static
+            # ⚠️ Frameworks DINÂMICOS: expõe o módulo 'Flutter' para Swift (import Flutter)
+            use_frameworks! :linkage => :dynamic
+
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -106,7 +108,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers seletivos p/ Firebase e cia
+            # Modular headers seletivos p/ Firebase e dependências (vira módulo Swift)
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -131,13 +133,13 @@ workflows:
 
           target 'ImageNotification' do
             inherit! :search_paths
-            use_frameworks! :linkage => :static
+            # Mesma política (dinâmico) para não conflitar com Runner
+            use_frameworks! :linkage => :dynamic
           end
 
-          # NÃO declare o widget aqui (seu target é "Quicky WidgetExtension" e não usa pods).
+          # NÃO declarar o widget aqui (o target é "Quicky WidgetExtension" e não usa pods).
 
           post_install do |installer|
-            # helper para concatenar sem duplicar
             def append_unique(bs, key, extra)
               val = bs[key] || '$(inherited)'
               s = val.to_s
@@ -155,7 +157,7 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Todos os pods viram módulos Swift
+                # Todos os pods expõem módulo (ajuda SwiftEmitModule)
                 bs['DEFINES_MODULE'] = 'YES'
                 bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
@@ -168,7 +170,6 @@ workflows:
                 # -ObjC evita símbolos faltando
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
 
-                # Extensão: API-only
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
