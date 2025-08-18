@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 
+// MARK: - Entry
 struct UserEntry: TimelineEntry {
     let date: Date
     let displayName: String
@@ -10,16 +11,10 @@ struct UserEntry: TimelineEntry {
     let rating: String
 }
 
+// MARK: - Provider
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> UserEntry {
-        UserEntry(
-            date: Date(),
-            displayName: "",
-            photoUrl: nil,
-            saldo: "0",
-            nextTask: "",
-            rating: ""
-        )
+        UserEntry(date: Date(), displayName: "", photoUrl: nil, saldo: "0", nextTask: "", rating: "")
     }
 
     func getSnapshot(in context: Context, completion: @escaping (UserEntry) -> Void) {
@@ -33,67 +28,60 @@ struct Provider: TimelineProvider {
     }
 
     private func loadEntry() -> UserEntry {
-        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick")
+        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick") // <— seu app group
         let displayName = defaults?.string(forKey: "display_name") ?? ""
         let photoUrl = defaults?.string(forKey: "photo_url").flatMap { URL(string: $0) }
         let saldo = defaults?.string(forKey: "saldo") ?? ""
         let nextTask = defaults?.string(forKey: "nexttask") ?? ""
         let rating = defaults?.string(forKey: "rating") ?? ""
-        return UserEntry(
-            date: Date(),
-            displayName: displayName,
-            photoUrl: photoUrl,
-            saldo: saldo,
-            nextTask: nextTask,
-            rating: rating
-        )
+        return UserEntry(date: Date(), displayName: displayName, photoUrl: photoUrl, saldo: saldo, nextTask: nextTask, rating: rating)
     }
 }
 
+// MARK: - View
 struct Quicky_WidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        HStack(alignment: .center) {
-            if let url = entry.photoUrl {
-                AsyncImage(url: url) { image in
-                    image.resizable()
-                } placeholder: {
-                    Color.gray
+        // Torna o WIDGET inteiro clicável abrindo o app:
+        Link(destination: URL(string: "quicky://open")!) {
+            HStack(alignment: .center) {
+                if let url = entry.photoUrl {
+                    AsyncImage(url: url) { image in
+                        image.resizable()
+                    } placeholder: {
+                        Color.gray
+                    }
+                    .frame(width: 48, height: 48)
+                    .clipShape(Circle())
                 }
-                .frame(width: 48, height: 48)
-                .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.displayName).font(.headline)
+                    Text("Saldo: \(entry.saldo)").font(.caption)
+                    Text("Próxima tarefa: \(entry.nextTask)").font(.caption2)
+                    Text("Rating: \(entry.rating)").font(.caption2)
+                }
+                Spacer(minLength: 0)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text("Saldo: \(entry.saldo)")
-                    .font(.caption)
-                    .lineLimit(1)
-                Text("Próxima tarefa: \(entry.nextTask)")
-                    .font(.caption2)
-                    .lineLimit(1)
-                Text("Rating: \(entry.rating)")
-                    .font(.caption2)
-                    .lineLimit(1)
-            }
+            .padding()
         }
-        .padding()
+        // Em iOS 17+, evita recortes apertados
+        .containerBackground(for: .widget) {
+            Color.clear
+        }
     }
 }
 
+// MARK: - Widget
 struct Quicky_Widget: Widget {
     let kind: String = "Quicky_Widget"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            // 👉 O toque no widget abre o app pelo URL scheme
             Quicky_WidgetEntryView(entry: entry)
-                .widgetURL(URL(string: "quicky://open")!)
         }
         .configurationDisplayName("Quicky")
         .description("Mostra informações do usuário.")
-        // .supportedFamilies([.systemSmall, .systemMedium, .systemLarge]) // opcional
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
