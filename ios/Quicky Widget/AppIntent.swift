@@ -2,17 +2,14 @@
 //  AppIntent.swift
 //  Quicky Widget
 //
-//  Created by Enzo Godoy on 14/08/2025.
-//
 
-#if canImport(WidgetKit) && canImport(AppIntents)
+#if canImport(WidgetKit) && canImport(AppIntents) && os(iOS)
 
 import Foundation
 import WidgetKit
 import AppIntents
 
-// MARK: - Intent de configuração do Widget
-// Disponível em iOS 16.0+ e seguro para extensão.
+// MARK: - Configuração do widget
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
@@ -23,23 +20,24 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     var favoriteEmoji: String
 }
 
-// MARK: - AppIntent com perform() (extension-safe)
+// MARK: - Ação que abre o app
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
-    static var title: LocalizedStringResource = "Quicky Action"
-    static var description = IntentDescription("Executes a simple action for the Quicky widget.")
+    static var title: LocalizedStringResource = "Abrir Quicky"
+    static var description = IntentDescription("Abre o app principal Quicky.")
 
-    @Parameter(title: "Message")
+    @Parameter(title: "Mensagem")
     var message: String?
 
-    // Alguns toolchains pedem a disponibilidade também no método.
     @available(iOS 16.0, *)
     @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
-        // Sua lógica aqui (não use APIs proibidas em extensão)
-        return .result()
+        // Ao tocar, simplesmente abre o app
+        return .result(
+            opensApp: true
+        )
     }
 }
 
