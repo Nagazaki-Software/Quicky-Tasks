@@ -53,16 +53,16 @@ workflows:
           mkdir -p ios/Runner
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
           if [ ! -f "$SWIFT_FILE" ]; then
-          cat > "$SWIFT_FILE" <<'SWIFT'
-          import Foundation
-          @objc class SwiftDummy: NSObject {}
-          SWIFT
+            cat > "$SWIFT_FILE" <<'SWIFT'
+            import Foundation
+            @objc class SwiftDummy: NSObject {}
+            SWIFT
             echo "Criado $SWIFT_FILE"
           else
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + módulos + Flutter explícito)
+      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + modular headers global)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -82,6 +82,9 @@ workflows:
             'Release' => :release,
           }
 
+          # Precisamos de módulos p/ pods Swift (Firebase/SDWebImage etc.)
+          use_modular_headers!
+
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
             raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
@@ -96,50 +99,27 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Frameworks DINÂMICOS para expor módulo 'Flutter' aos plugins Swift
+            # Frameworks DINÂMICOS (expõe módulo 'Flutter' aos plugins Swift)
             use_frameworks! :linkage => :dynamic
 
-            # Garante que o módulo 'Flutter' exista para 'import Flutter'
-            pod 'Flutter', :path => 'Flutter'
-
+            # Instala os pods do Flutter/projetos (inclui Flutter.xcframework)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree
+            # Braintree (ok com dynamic frameworks)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
-
-            # Modular headers seletivos p/ Firebase e dependências
-            pod 'SDWebImage',               :modular_headers => true
-            pod 'FirebaseCore',             :modular_headers => true
-            pod 'FirebaseCoreExtension',    :modular_headers => true
-            pod 'FirebaseCoreInternal',     :modular_headers => true
-            pod 'GoogleUtilities',          :modular_headers => true
-            pod 'GoogleDataTransport',      :modular_headers => true
-            pod 'FirebaseInstallations',    :modular_headers => true
-            pod 'nanopb',                   :modular_headers => true
-            pod 'FirebaseAuthInterop',      :modular_headers => true
-            pod 'FirebaseAppCheckInterop',  :modular_headers => true
-            pod 'FirebaseMessagingInterop', :modular_headers => true
-            pod 'RecaptchaInterop',         :modular_headers => true
-            pod 'FirebaseAuth',             :modular_headers => true
-            pod 'FirebaseFirestore',        :modular_headers => true
-            pod 'FirebaseFirestoreInternal',:modular_headers => true
-            pod 'FirebaseFunctions',        :modular_headers => true
-            pod 'FirebaseRemoteConfig',     :modular_headers => true
-            pod 'FirebaseSessions',         :modular_headers => true
-            pod 'FirebaseStorage',          :modular_headers => true
-            pod 'FirebaseABTesting',        :modular_headers => true
           end
 
+          # Extensão de notificação (sem pods próprios; herda search paths)
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :dynamic
           end
 
-          # NÃO declarar o widget aqui (o target é "Quicky WidgetExtension" e não usa pods).
+          # Widget NÃO é alvo de pods (target chama "Quicky WidgetExtension")
 
           post_install do |installer|
             def append_unique(bs, key, extra)
@@ -150,6 +130,7 @@ workflows:
               end
             end
 
+            # Ajusta pods
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 bs = c.build_settings
@@ -159,17 +140,17 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Expor módulos p/ Swift
+                # Expor módulos p/ Swift & compatibilidade binária
                 bs['DEFINES_MODULE'] = 'YES'
                 bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
 
-                # Headers públicos + headers dos plugins em Sources/**/include
+                # Headers dos pods + headers dos plugins (Sources/**/include)
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
 
-                # -ObjC evita símbolos faltando
+                # -ObjC evita símbolos perdidos
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
 
                 if t.name == 'ImageNotification'
@@ -178,7 +159,7 @@ workflows:
               end
             end
 
-            # Ajustes também no projeto do Runner
+            # Ajusta também o projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
