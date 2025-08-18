@@ -1,44 +1,31 @@
-//
-//  AppIntent.swift
-//  Quicky Widget
-//
+// ios/Quicky Widget/AppIntent.swift
 
-#if canImport(WidgetKit) && canImport(AppIntents) && os(iOS)
-
-import Foundation
+#if canImport(WidgetKit) && canImport(AppIntents)
 import WidgetKit
 import AppIntents
 
-// MARK: - Configuração do widget
+// Intent de configuração do Widget (não precisa de perform())
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Configuration"
-    static var description = IntentDescription("This is an example widget.")
+    static var description = IntentDescription("Quicky widget configuration.")
 
     @Parameter(title: "Favorite Emoji", default: "😃")
     var favoriteEmoji: String
 }
 
-// MARK: - Ação que abre o app
+// (Opcional) Se quiser manter uma action, deixe o perform mais “simples” possível
 @available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
-    static var title: LocalizedStringResource = "Abrir Quicky"
-    static var description = IntentDescription("Abre o app principal Quicky.")
+    static var title: LocalizedStringResource = "Quicky Action"
+    static var description = IntentDescription("Simple action for the widget.")
 
-    @Parameter(title: "Mensagem")
-    var message: String?
-
-    @available(iOS 16.0, *)
-    @available(iOSApplicationExtension 16.0, *)
     @MainActor
     func perform() async throws -> some IntentResult {
-        // Ao tocar, simplesmente abre o app
-        return .result(
-            opensApp: true
-        )
+        // Nada que exija abrir app aqui; apenas finalize.
+        return .result()
     }
 }
-
 #endif
