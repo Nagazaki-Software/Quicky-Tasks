@@ -165,30 +165,45 @@ workflows:
       - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
-          # Aplica perfis no .xcodeproj (gera /Users/builder/export_options.plist)
           xcode-project use-profiles
-
-          # Copia de forma "idempotente" para o caminho que o Flutter espera
           SRC="/Users/builder/export_options.plist"
           DEST="ios/Runner/ExportOptions.plist"
           if [ -f "$SRC" ]; then
             mkdir -p ios/Runner
-            # Evita o erro "are identical" do cp
             cat "$SRC" > "$DEST"
             echo "ExportOptions.plist salvo em $DEST"
           else
             echo "ATENÇÃO: $SRC não existe. Verifique os perfis."
             exit 1
           fi
+          echo "Conteúdo do ExportOptions.plist:"
+          sed -n '1,120p' "$DEST" || true
 
       - name: Build IPA assinado (Release)
         script: |
+          # IMPORTANTE: pipefail pra não engolir o exit code quando usar tee
           set -euo pipefail
+          set -o pipefail
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
+          mkdir -p build_logs
           flutter build ipa --release \
             --build-number=$FLUTTER_BUILD_NUMBER \
-            --export-options-plist="ios/Runner/ExportOptions.plist"
+            --export-options-plist="ios/Runner/ExportOptions.plist" \
+            --verbose 2>&1 | tee build_logs/flutter_build_verbose.log
+          echo "Build finalizado."
+
+      - name: Diagnóstico pós-build (extrair erros do log e DerivedData)
+        script: |
+          set -euo pipefail
+          echo "==== Procurando erros no log do Flutter ===="
+          (grep -nE "error:|Swift Compiler Error|fatal error" build_logs/flutter_build_verbose.log || true) | tail -n 200
+          echo "==== Listando archive/ipa gerados ===="
+          ls -R build/ios || true
+          echo "==== DerivedData (top dirs) ===="
+          ls -1 ~/Library/Developer/Xcode/DerivedData || true
+          echo "==== Grep por erros no DerivedData (isso pode demorar um pouco) ===="
+          (grep -R -nE "error:|Swift Compiler Error|fatal error" ~/Library/Developer/Xcode/DerivedData | tail -n 300) || true
 
       - name: Upload para App Store Connect (TestFlight)
         script: |
@@ -220,11 +235,7 @@ workflows:
 
           echo "Upload disparado: $IPA_PATH"
 
-      - name: Diagnóstico bundles no archive
-        script: |
-          set -euo pipefail
-          find build/ios/archive -maxdepth 3 -type d -name "*.app" -or -name "*.appex" || true
-
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
+      - build_logs/*.log
