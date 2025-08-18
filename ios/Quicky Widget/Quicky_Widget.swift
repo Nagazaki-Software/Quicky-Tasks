@@ -28,7 +28,7 @@ struct Provider: TimelineProvider {
     }
 
     private func loadEntry() -> UserEntry {
-        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick") // <— seu app group
+        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick") // <- seu App Group
         let displayName = defaults?.string(forKey: "display_name") ?? ""
         let photoUrl = defaults?.string(forKey: "photo_url").flatMap { URL(string: $0) }
         let saldo = defaults?.string(forKey: "saldo") ?? ""
@@ -43,7 +43,7 @@ struct Quicky_WidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        // Torna o WIDGET inteiro clicável abrindo o app:
+        // Deixa o WIDGET inteiro clicável, abrindo o app via deep link
         Link(destination: URL(string: "quicky://open")!) {
             HStack(alignment: .center) {
                 if let url = entry.photoUrl {
@@ -65,9 +65,20 @@ struct Quicky_WidgetEntryView: View {
             }
             .padding()
         }
-        // Em iOS 17+, evita recortes apertados
-        .containerBackground(for: .widget) {
-            Color.clear
+        // iOS 17+: usa containerBackground
+        .modifier(WidgetBackgroundCompat())
+    }
+}
+
+// Compat: iOS 16 não tem containerBackground(for:.widget)
+private struct WidgetBackgroundCompat: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            content
+                .containerBackground(for: .widget) { Color.clear }
+        } else {
+            content
+                .background(Color.clear)
         }
     }
 }
