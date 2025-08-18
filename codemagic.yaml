@@ -7,7 +7,7 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
-        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional, só p/ perfis
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional (apenas perfis)
       groups:
         - appstore_credentials
         - ios_signing_files
@@ -62,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (use_frameworks!, módulos e flags)
+      - name: Escrever/Atualizar Podfile (inclui paths de includes dos plugins)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -134,35 +134,47 @@ workflows:
             use_frameworks! :linkage => :static
           end
 
-          # NÃO declarar o widget aqui — seu target no Xcode é "Quicky WidgetExtension" e não precisa de pods.
+          # NÃO declare o widget aqui (seu target é "Quicky WidgetExtension" e não usa pods).
 
           post_install do |installer|
-            installer.pods_project.targets.each do |t|
-              t.build_configurations.each do |c|
-                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-                c.build_settings['SWIFT_VERSION'] = '5.0'
-                c.build_settings['ENABLE_BITCODE'] = 'NO'
-                # Header search p/ Flutter/Flutter.h quando estático
-                hs = c.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
-                extra = ' "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Flutter"'
-                unless hs.to_s.include?('Headers/Public/Flutter')
-                  c.build_settings['HEADER_SEARCH_PATHS'] = hs.to_s + extra
-                end
-                # -ObjC evita símbolos faltando
-                ld = c.build_settings['OTHER_LDFLAGS'] || '$(inherited)'
-                unless ld.to_s.include?('-ObjC')
-                  c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
-                end
-                c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                if t.name == 'ImageNotification'
-                  c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
-                end
-                # Força cada pod a ser módulo Swift (mitiga SwiftEmitModule/Compile “fantasma”)
-                c.build_settings['DEFINES_MODULE'] = 'YES'
-                c.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+            # helper para concatenar sem duplicar
+            def append_unique(bs, key, extra)
+              val = bs[key] || '$(inherited)'
+              s = val.to_s
+              unless s.include?(extra)
+                bs[key] = s + ' ' + extra
               end
             end
+
+            installer.pods_project.targets.each do |t|
+              t.build_configurations.each do |c|
+                bs = c.build_settings
+                bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                bs['CLANG_ENABLE_MODULES'] = 'YES'
+                bs['SWIFT_VERSION'] = '5.0'
+                bs['ENABLE_BITCODE'] = 'NO'
+                bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+
+                # Todos os pods viram módulos Swift
+                bs['DEFINES_MODULE'] = 'YES'
+                bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+                bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+                # Headers públicos + headers dos plugins em Sources/**/include
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
+
+                # -ObjC evita símbolos faltando
+                append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
+
+                # Extensão: API-only
+                if t.name == 'ImageNotification'
+                  bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                end
+              end
+            end
+
             # Garante SWIFT_VERSION também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
@@ -301,7 +313,6 @@ workflows:
             for f in "${MAPFILE[@]}"; do
               echo "--- Arquivo: $f ---"
               CONTENT=$(strings "$f" || true)
-              # 1) Bloco de SwiftEmitModule
               if printf "%s" "$CONTENT" | grep -q "Command SwiftEmitModule"; then
                 line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftEmitModule" | awk '{print $1}')
                 start=$((line-200)); [ $start -lt 1 ] && start=1
@@ -309,7 +320,6 @@ workflows:
                 echo ">>> Bloco em torno do SwiftEmitModule (linhas $start..$end):"
                 printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
               fi
-              # 2) Bloco de SwiftCompile (caso tenha)
               if printf "%s" "$CONTENT" | grep -q "Command SwiftCompile"; then
                 line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftCompile" | awk '{print $1}')
                 start=$((line-200)); [ $start -lt 1 ] && start=1
