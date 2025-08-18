@@ -50,17 +50,11 @@ workflows:
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
-          mkdir -p ios/Runner
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
-          if [ ! -f "$SWIFT_FILE" ]; then
-            cat > "$SWIFT_FILE" <<'SWIFT'
-            import Foundation
-            @objc class SwiftDummy: NSObject {}
-            SWIFT
-            echo "Criado $SWIFT_FILE"
-          else
-            echo "Já existe $SWIFT_FILE"
-          fi
+          mkdir -p "$(dirname "$SWIFT_FILE")"
+          # sem heredoc: impossível quebrar por indentação
+          printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
+          echo "Escrevi $SWIFT_FILE"
 
       - name: Escrever/Atualizar Podfile (frameworks dinâmicos + modular headers global)
         script: |
@@ -102,10 +96,10 @@ workflows:
             # Frameworks DINÂMICOS (expõe módulo 'Flutter' aos plugins Swift)
             use_frameworks! :linkage => :dynamic
 
-            # Instala os pods do Flutter/projetos (inclui Flutter.xcframework)
+            # Instala os pods do Flutter/projetos (inclui Flutter.xcframework via podhelper)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (ok com dynamic frameworks)
+            # Braintree
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
