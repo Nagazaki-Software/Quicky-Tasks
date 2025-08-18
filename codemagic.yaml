@@ -47,7 +47,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (static libs + modular headers seletivos)
+      - name: Escrever/Atualizar Podfile (static libs + modular header só no ABTesting)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -92,28 +92,8 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # ==== Modular headers exigidos pelo validator do CocoaPods ====
-            pod 'SDWebImage',               :modular_headers => true
-            pod 'FirebaseCore',             :modular_headers => true
-            pod 'FirebaseCoreExtension',    :modular_headers => true
-            pod 'FirebaseCoreInternal',     :modular_headers => true
-            pod 'GoogleUtilities',          :modular_headers => true
-            pod 'FirebaseInstallations',    :modular_headers => true
-            pod 'GoogleDataTransport',      :modular_headers => true
-            pod 'nanopb',                   :modular_headers => true
-
-            pod 'FirebaseAuth',             :modular_headers => true
-            pod 'FirebaseAuthInterop',      :modular_headers => true
-            pod 'RecaptchaInterop',         :modular_headers => true
-            pod 'FirebaseAppCheckInterop',  :modular_headers => true
-            pod 'FirebaseMessagingInterop', :modular_headers => true
-
-            pod 'FirebaseFirestore',        :modular_headers => true
-            pod 'FirebaseFirestoreInternal',:modular_headers => true
-            pod 'FirebaseFunctions',        :modular_headers => true
-            pod 'FirebaseRemoteConfig',     :modular_headers => true
-            pod 'FirebaseSessions',         :modular_headers => true
-            pod 'FirebaseStorage',          :modular_headers => true
+            # 🔑 Modularize só o que o validator pediu:
+            pod 'FirebaseABTesting', :modular_headers => true
           end
 
           # Extensão sem pods (mantém independente)
