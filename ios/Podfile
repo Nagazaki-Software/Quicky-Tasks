@@ -18,11 +18,13 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks! :linkage => :static
+  # ⚠️ Removido: use_frameworks!
+  use_modular_headers!  # ajuda a Firestore/GoogleUtilities a exportarem modulemaps
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  pod 'Braintree/Core',          '~> 6.36'
+  # Braintree (funciona bem sem use_frameworks!)
+  pod 'Braintree',               '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
@@ -35,6 +37,7 @@ post_install do |installer|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       c.build_settings['SWIFT_VERSION'] = '5.0'
       c.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'  # garante módulos
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
