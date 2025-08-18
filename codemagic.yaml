@@ -62,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (consistência de use_frameworks! nos targets)
+      - name: Escrever/Atualizar Podfile (consistência use_frameworks! + headers + flags)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -95,7 +95,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # Runner como frameworks estáticos (resolve headers/módulos p/ plugins)
+          # Host: frameworks estáticos
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -107,7 +107,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers seletivos (Firebase + dependências pedidas pelo validator)
+            # Modular headers seletivos (conforme reclamações do validator)
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -130,8 +130,14 @@ workflows:
             pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # A extensão EMBEDDA no Runner PRECISA bater com use_frameworks! do host
+          # Extensão de notificação — precisa combinar com o host
           target 'ImageNotification' do
+            inherit! :search_paths
+            use_frameworks! :linkage => :static
+          end
+
+          # (Opcional) Widget extension — se existir no projeto Xcode, mantenha consistência também
+          target 'Quicky-Widget' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
           end
@@ -155,13 +161,13 @@ workflows:
                   c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
                 end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                # App extension deve respeitar API-only
-                if t.name == 'ImageNotification'
+                # Extensões: API limitada
+                if ['ImageNotification','Quicky-Widget'].include?(t.name)
                   c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
               end
             end
-            # SWIFT_VERSION também no projeto Runner
+            # SWIFT_VERSION também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -251,7 +257,7 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensões (se houver perfil correspondente)
+          # Extensões
           for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
             [ -n "$BID" ] || continue
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
@@ -272,6 +278,8 @@ workflows:
           mkdir -p build_logs
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
+          # Log em tempo real (melhora flush dos erros Swift)
+          export NSUnbufferedIO=YES
           set +e
           flutter build ipa --release \
             --build-number="$FLUTTER_BUILD_NUMBER" \
@@ -281,41 +289,30 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (pegar o erro real)
+      - name: Diagnóstico pós-build (SwiftCompile detalhado)
         script: |
           set -euo pipefail
-          echo "==== Procurando erros no log do Flutter ===="
-          if [ -f build_logs/flutter_build_verbose.log ]; then
-            lnnum=$(grep -nE "error:|Swift Compiler Error|fatal error" build_logs/flutter_build_verbose.log | head -n 1 | cut -d: -f1 || true)
-            if [ -n "$lnnum" ]; then
-              echo "--- Contexto do flutter_build_verbose.log (±80 linhas) ---"
-              start=$((lnnum-80)); [ $start -lt 1 ] && start=1
-              end=$((lnnum+80))
-              sed -n "${start},${end}p" build_logs/flutter_build_verbose.log || true
-            else
-              echo "Nenhum 'error:' encontrado no flutter_build_verbose.log"
-            fi
+          echo "==== Procurando SwiftCompile nos activity logs do Xcode ===="
+          MAPFILE=()
+          while IFS= read -r -d '' f; do MAPFILE+=("$f"); done < <(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name "*.xcactivitylog" -print0 2>/dev/null | tail -n 10 | tr '\n' '\0')
+          if [ ${#MAPFILE[@]} -eq 0 ]; then
+            echo "Nenhum .xcactivitylog encontrado."
           else
-            echo "Log build_logs/flutter_build_verbose.log não encontrado."
-          fi
-
-          echo "==== Vasculhando activity logs do Xcode ===="
-          ACTLOGS=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name "*.xcactivitylog" 2>/dev/null | tail -n 5)
-          if [ -n "$ACTLOGS" ]; then
-            for f in $ACTLOGS; do
+            for f in "${MAPFILE[@]}"; do
               echo "--- Arquivo: $f ---"
-              line=$(strings "$f" | grep -nE "error:|Swift Compiler Error|fatal error" | head -n 1 | cut -d: -f1 || true)
-              if [ -n "$line" ]; então
-                echo "Contexto (±80):"
-                start=$((line-80)); [ $start -lt 1 ] && start=1
-                end=$((line+80))
-                strings "$f" | sed -n "${start},${end}p" || true
+              CONTENT=$(strings "$f" || true)
+              if printf "%s" "$CONTENT" | grep -q "Command SwiftCompile"; then
+                line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftCompile" | awk '{print $1}')
+                start=$((line-200)); [ $start -lt 1 ] && start=1
+                end=$((line+200))
+                echo ">>> Bloco em torno do SwiftCompile (linhas $start..$end):"
+                printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
+                echo ">>> PRIMEIROS ERROS DETECTADOS:"
+                printf "%s" "$CONTENT" | grep -nE "error: |Swift Compiler Error|cannot find|no such module|unavailable" | head -n 10 || true
               else
-                echo "Sem 'error:' neste activity log."
+                echo "Sem SwiftCompile nesse log."
               fi
             done
-          else
-            echo "Nenhum .xcactivitylog encontrado."
           fi
 
       - name: Upload para App Store Connect (TestFlight)
