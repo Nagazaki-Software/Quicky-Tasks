@@ -88,5 +88,7 @@ struct Quicky_Widget: Widget {
         }
         .configurationDisplayName("Quicky")
         .description("Mostra informações do usuário.")
+        // 👇 ao tocar no widget, abre o app
+        .widgetURL(URL(string: "quicky://open")!)
     }
 }
