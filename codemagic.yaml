@@ -106,7 +106,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers seletivos p/ Firebase e cia (evita "não define módulos")
+            # Modular headers seletivos p/ Firebase e cia
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -134,10 +134,9 @@ workflows:
             use_frameworks! :linkage => :static
           end
 
-          # NÃO declarar widget aqui — seu target se chama "Quicky WidgetExtension" e não precisa de pods.
+          # NÃO declarar o widget aqui — seu target no Xcode é "Quicky WidgetExtension" e não precisa de pods.
 
           post_install do |installer|
-            # Ajustes globais de build
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
@@ -156,19 +155,14 @@ workflows:
                   c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
                 end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                # Extensão: API-only
                 if t.name == 'ImageNotification'
                   c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
-                # 💡 O pulo do gato: fazer TODO POD virar módulo Swift
+                # Força cada pod a ser módulo Swift (mitiga SwiftEmitModule/Compile “fantasma”)
                 c.build_settings['DEFINES_MODULE'] = 'YES'
                 c.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-                # Flags Swift herdadas (evita otimizações doidas quebrando import)
-                osf = c.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
-                c.build_settings['OTHER_SWIFT_FLAGS'] = osf.to_s
               end
             end
-
             # Garante SWIFT_VERSION também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
@@ -264,7 +258,7 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensão (se encontrar perfil)
+          # Extensões se houver perfil
           for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
             [ -n "$BID" ] || continue
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
@@ -295,10 +289,10 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (SwiftCompile detalhado)
+      - name: Diagnóstico pós-build (SwiftCompile/SwiftEmitModule detalhado)
         script: |
           set -euo pipefail
-          echo "==== Procurando SwiftCompile nos activity logs do Xcode ===="
+          echo "==== Vasculhando activity logs do Xcode ===="
           MAPFILE=()
           while IFS= read -r -d '' f; do MAPFILE+=("$f"); done < <(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name "*.xcactivitylog" -print0 2>/dev/null | tail -n 10 | tr '\n' '\0')
           if [ ${#MAPFILE[@]} -eq 0 ]; then
@@ -307,18 +301,38 @@ workflows:
             for f in "${MAPFILE[@]}"; do
               echo "--- Arquivo: $f ---"
               CONTENT=$(strings "$f" || true)
+              # 1) Bloco de SwiftEmitModule
+              if printf "%s" "$CONTENT" | grep -q "Command SwiftEmitModule"; then
+                line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftEmitModule" | awk '{print $1}')
+                start=$((line-200)); [ $start -lt 1 ] && start=1
+                end=$((line+200))
+                echo ">>> Bloco em torno do SwiftEmitModule (linhas $start..$end):"
+                printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
+              fi
+              # 2) Bloco de SwiftCompile (caso tenha)
               if printf "%s" "$CONTENT" | grep -q "Command SwiftCompile"; then
                 line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftCompile" | awk '{print $1}')
                 start=$((line-200)); [ $start -lt 1 ] && start=1
                 end=$((line+200))
                 echo ">>> Bloco em torno do SwiftCompile (linhas $start..$end):"
                 printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
-                echo ">>> PRIMEIROS ERROS DETECTADOS:"
-                printf "%s" "$CONTENT" | grep -nE "error: |Swift Compiler Error|cannot find|no such module|unavailable" | head -n 10 || true
-              else
-                echo "Sem SwiftCompile nesse log."
               fi
+              echo ">>> PRIMEIROS ERROS DETECTADOS (grep):"
+              printf "%s" "$CONTENT" | grep -nE "error: |Swift Compiler Error|no such module|cannot find|failed to emit|undeclared|unavailable" | head -n 20 || true
             done
+          fi
+          echo "==== Contexto do flutter_build_verbose.log (top 200 linhas com erro) ===="
+          if [ -f build_logs/flutter_build_verbose.log ]; then
+            lnnum=$(grep -nE "error:|Swift Compiler Error|failed to emit|no such module" build_logs/flutter_build_verbose.log | head -n 1 | cut -d: -f1 || true)
+            if [ -n "$lnnum" ]; then
+              start=$((lnnum-100)); [ $start -lt 1 ] && start=1
+              end=$((lnnum+100))
+              sed -n "${start},${end}p" build_logs/flutter_build_verbose.log || true
+            else
+              echo "Nenhum 'error:' encontrado no flutter_build_verbose.log"
+            fi
+          else
+            echo "Log build_logs/flutter_build_verbose.log não encontrado."
           fi
 
       - name: Upload para App Store Connect (TestFlight)
