@@ -7,8 +7,7 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
-        # Se tiver widget e quiser perfis, pode manter a var abaixo. Não usamos mais target no Podfile.
-        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional, só p/ perfis
       groups:
         - appstore_credentials
         - ios_signing_files
@@ -63,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (consistência use_frameworks! + headers + flags)
+      - name: Escrever/Atualizar Podfile (use_frameworks!, módulos e flags)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -96,7 +95,6 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # Host: frameworks estáticos
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -108,7 +106,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers seletivos (conforme reclamações do validator)
+            # Modular headers seletivos p/ Firebase e cia (evita "não define módulos")
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -131,16 +129,15 @@ workflows:
             pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # Extensão embutida PRECISA casar o use_frameworks! com o host
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
           end
 
-          # ⚠️ NÃO declare o widget aqui. O seu alvo no Xcode é "Quicky WidgetExtension".
-          # Como ele não precisa de pods, deixar fora evita erros de alvo inexistente.
+          # NÃO declarar widget aqui — seu target se chama "Quicky WidgetExtension" e não precisa de pods.
 
           post_install do |installer|
+            # Ajustes globais de build
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
@@ -159,12 +156,20 @@ workflows:
                   c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
                 end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+                # Extensão: API-only
                 if t.name == 'ImageNotification'
                   c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
+                # 💡 O pulo do gato: fazer TODO POD virar módulo Swift
+                c.build_settings['DEFINES_MODULE'] = 'YES'
+                c.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+                # Flags Swift herdadas (evita otimizações doidas quebrando import)
+                osf = c.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                c.build_settings['OTHER_SWIFT_FLAGS'] = osf.to_s
               end
             end
-            # SWIFT_VERSION também no projeto do Runner
+
+            # Garante SWIFT_VERSION também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -190,11 +195,16 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
+      - name: Zerar caches (DerivedData e Pods) p/ build limpo mesmo
+        script: |
+          set -euo pipefail
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
+
       - name: CocoaPods install (limpo)
         script: |
           set -euo pipefail
           source $CM_ENV || true
-          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
           cd ios
           pod --version
           pod repo update
@@ -225,7 +235,6 @@ workflows:
             --type IOS_APP_STORE --create --verbose
           app-store-connect fetch-signing-files "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
-          # Se quiser, tenta o widget também (ignora erro se não existir na conta)
           app-store-connect fetch-signing-files "$EXT_WIDGET_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
 
@@ -255,9 +264,9 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensão de notificação (se existir perfil)
-          BID="$EXT_IMAGE_NOTIFICATION_BUNDLE_ID"
-          if [ -n "$BID" ]; then
+          # Extensão (se encontrar perfil)
+          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
+            [ -n "$BID" ] || continue
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
               | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
               | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
@@ -265,19 +274,7 @@ workflows:
             if [ -n "$PNAME" ]; then
               /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
             fi
-          fi
-
-          # Widget (opcional): só será adicionado se encontrar um perfil com esse bundle id
-          BID="$EXT_WIDGET_BUNDLE_ID"
-          if [ -n "$BID" ]; then
-            PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
-              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
-              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
-              | grep -m1 "$BID" -B1 | head -n1 || true)
-            if [ -n "$PNAME" ]; then
-              /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
-            fi
-          fi
+          done
 
           echo "=== ExportOptions.plist ==="
           /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
