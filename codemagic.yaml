@@ -7,6 +7,7 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
+        # Se tiver widget e quiser perfis, pode manter a var abaixo. Não usamos mais target no Podfile.
         EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
       groups:
         - appstore_credentials
@@ -130,17 +131,14 @@ workflows:
             pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # Extensão de notificação — precisa combinar com o host
+          # Extensão embutida PRECISA casar o use_frameworks! com o host
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
           end
 
-          # (Opcional) Widget extension — se existir no projeto Xcode, mantenha consistência também
-          target 'Quicky-Widget' do
-            inherit! :search_paths
-            use_frameworks! :linkage => :static
-          end
+          # ⚠️ NÃO declare o widget aqui. O seu alvo no Xcode é "Quicky WidgetExtension".
+          # Como ele não precisa de pods, deixar fora evita erros de alvo inexistente.
 
           post_install do |installer|
             installer.pods_project.targets.each do |t|
@@ -161,8 +159,7 @@ workflows:
                   c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
                 end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                # Extensões: API limitada
-                if ['ImageNotification','Quicky-Widget'].include?(t.name)
+                if t.name == 'ImageNotification'
                   c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
               end
@@ -228,6 +225,7 @@ workflows:
             --type IOS_APP_STORE --create --verbose
           app-store-connect fetch-signing-files "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
+          # Se quiser, tenta o widget também (ignora erro se não existir na conta)
           app-store-connect fetch-signing-files "$EXT_WIDGET_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
 
@@ -257,9 +255,9 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensões
-          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
-            [ -n "$BID" ] || continue
+          # Extensão de notificação (se existir perfil)
+          BID="$EXT_IMAGE_NOTIFICATION_BUNDLE_ID"
+          if [ -n "$BID" ]; then
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
               | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
               | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
@@ -267,7 +265,19 @@ workflows:
             if [ -n "$PNAME" ]; then
               /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
             fi
-          done
+          fi
+
+          # Widget (opcional): só será adicionado se encontrar um perfil com esse bundle id
+          BID="$EXT_WIDGET_BUNDLE_ID"
+          if [ -n "$BID" ]; then
+            PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
+              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
+              | grep -m1 "$BID" -B1 | head -n1 || true)
+            if [ -n "$PNAME" ]; then
+              /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
+            fi
+          fi
 
           echo "=== ExportOptions.plist ==="
           /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
@@ -278,7 +288,6 @@ workflows:
           mkdir -p build_logs
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
-          # Log em tempo real (melhora flush dos erros Swift)
           export NSUnbufferedIO=YES
           set +e
           flutter build ipa --release \
