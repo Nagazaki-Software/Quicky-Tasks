@@ -62,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + módulos)
+      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + módulos + Flutter explícito)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -96,8 +96,11 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # ⚠️ Frameworks DINÂMICOS: expõe o módulo 'Flutter' para Swift (import Flutter)
+            # Frameworks DINÂMICOS para expor módulo 'Flutter' aos plugins Swift
             use_frameworks! :linkage => :dynamic
+
+            # Garante que o módulo 'Flutter' exista para 'import Flutter'
+            pod 'Flutter', :path => 'Flutter'
 
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
@@ -108,7 +111,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers seletivos p/ Firebase e dependências (vira módulo Swift)
+            # Modular headers seletivos p/ Firebase e dependências
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -133,7 +136,6 @@ workflows:
 
           target 'ImageNotification' do
             inherit! :search_paths
-            # Mesma política (dinâmico) para não conflitar com Runner
             use_frameworks! :linkage => :dynamic
           end
 
@@ -157,7 +159,7 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Todos os pods expõem módulo (ajuda SwiftEmitModule)
+                # Expor módulos p/ Swift
                 bs['DEFINES_MODULE'] = 'YES'
                 bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
@@ -176,10 +178,12 @@ workflows:
               end
             end
 
-            # Garante SWIFT_VERSION também no projeto do Runner
+            # Ajustes também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
+                config.build_settings['DEFINES_MODULE'] = 'YES'
+                config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
               end
             end
           end
@@ -302,46 +306,48 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (SwiftCompile/SwiftEmitModule detalhado)
+      - name: Diagnóstico pós-build PRO (decodifica .xcresult com arquivo/linha)
         script: |
           set -euo pipefail
-          echo "==== Vasculhando activity logs do Xcode ===="
-          MAPFILE=()
-          while IFS= read -r -d '' f; do MAPFILE+=("$f"); done < <(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name "*.xcactivitylog" -print0 2>/dev/null | tail -n 10 | tr '\n' '\0')
-          if [ ${#MAPFILE[@]} -eq 0 ]; then
-            echo "Nenhum .xcactivitylog encontrado."
-          else
-            for f in "${MAPFILE[@]}"; do
-              echo "--- Arquivo: $f ---"
-              CONTENT=$(strings "$f" || true)
-              if printf "%s" "$CONTENT" | grep -q "Command SwiftEmitModule"; then
-                line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftEmitModule" | awk '{print $1}')
-                start=$((line-200)); [ $start -lt 1 ] && start=1
-                end=$((line+200))
-                echo ">>> Bloco em torno do SwiftEmitModule (linhas $start..$end):"
-                printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
-              fi
-              if printf "%s" "$CONTENT" | grep -q "Command SwiftCompile"; then
-                line=$(printf "%s" "$CONTENT" | nl -ba | grep -m1 "Command SwiftCompile" | awk '{print $1}')
-                start=$((line-200)); [ $start -lt 1 ] && start=1
-                end=$((line+200))
-                echo ">>> Bloco em torno do SwiftCompile (linhas $start..$end):"
-                printf "%s" "$CONTENT" | sed -n "${start},${end}p" || true
-              fi
-              echo ">>> PRIMEIROS ERROS DETECTADOS (grep):"
-              printf "%s" "$CONTENT" | grep -nE "error: |Swift Compiler Error|no such module|cannot find|failed to emit|undeclared|unavailable" | head -n 20 || true
-            done
+          echo "==== Procurando último .xcresult ===="
+          RES=$(find build -type d -name "*.xcresult" -print | tail -n 1 || true)
+          if [ -z "${RES:-}" ]; then
+            RES=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name "*.xcresult" -print | tail -n 1 || true)
           fi
-          echo "==== Contexto do flutter_build_verbose.log (top 200 linhas com erro) ===="
+          if [ -n "${RES:-}" ]; then
+            echo "Usando xcresult: $RES"
+            xcrun xcresulttool get --format json --path "$RES" > xcresult.json || true
+            echo "==== Primeiros erros extraídos ===="
+            python3 - <<'PY'
+import json, sys, re
+try:
+    data=json.load(open('xcresult.json'))
+except Exception as e:
+    print("Falha lendo xcresult.json:",e); sys.exit(0)
+def walk(obj):
+    if isinstance(obj, dict):
+        for k,v in obj.items():
+            if k=='issueSummaries' or k=='warningSummaries':
+                for it in v.get('_values',[]):
+                    msg = it.get('message',{}).get('_value','')
+                    typ = it.get('issueType',{}).get('_value','')
+                    if 'error' in typ.lower() or 'Swift' in typ or 'Uncategorized' in typ:
+                        print('--- ISSUE ---')
+                        print(typ,':',msg)
+            walk(v)
+    elif isinstance(obj, list):
+        for x in obj: walk(x)
+walk(data)
+PY
+            echo "==== Grep direto no xcresult (strings) ===="
+            strings "$RES" | grep -nE "error: |Swift(EmitModule|Compile)|no such module|cannot find|failed to emit|undeclared|unavailable" | head -n 80 || true
+          else
+            echo "Nenhum .xcresult encontrado."
+          fi
+
+          echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            lnnum=$(grep -nE "error:|Swift Compiler Error|failed to emit|no such module" build_logs/flutter_build_verbose.log | head -n 1 | cut -d: -f1 || true)
-            if [ -n "$lnnum" ]; then
-              start=$((lnnum-100)); [ $start -lt 1 ] && start=1
-              end=$((lnnum+100))
-              sed -n "${start},${end}p" build_logs/flutter_build_verbose.log || true
-            else
-              echo "Nenhum 'error:' encontrado no flutter_build_verbose.log"
-            fi
+            grep -nE "error:|Swift Compiler Error|failed to emit|no such module|fatal error:|note:" build_logs/flutter_build_verbose.log | head -n 120 || true
           else
             echo "Log build_logs/flutter_build_verbose.log não encontrado."
           fi
@@ -380,3 +386,4 @@ workflows:
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
       - build_logs/flutter_build_verbose.log
+      - xcresult.json
