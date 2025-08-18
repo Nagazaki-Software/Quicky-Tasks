@@ -51,15 +51,14 @@ workflows:
         script: |
           set -euo pipefail
           mkdir -p ios/Runner
-          SWIFT_FILE="ios/Runner/SwiftDummy.swift"
-          if [ ! -f "$SWIFT_FILE" ]; then
+          if [ ! -f ios/Runner/SwiftDummy.swift ]; then
             /usr/bin/env bash -lc 'cat > ios/Runner/SwiftDummy.swift <<'"'"'SWIFT'"'"'
           import Foundation
           @objc class SwiftDummy: NSObject {}
           SWIFT'
-            echo "Criado $SWIFT_FILE"
+            echo "Criado ios/Runner/SwiftDummy.swift"
           else
-            echo "Já existe $SWIFT_FILE"
+            echo "Já existe ios/Runner/SwiftDummy.swift"
           fi
 
       - name: Escrever/Atualizar Podfile (estático + módulos seletivos)
@@ -97,17 +96,17 @@ workflows:
 
           # App principal
           target 'Runner' do
-            # NADA de use_frameworks! (pods estáticos, fluxo padrão do Flutter)
+            # NADA de use_frameworks! (pods estáticos = fluxo padrão do Flutter)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (ok com estático)
+            # Braintree
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # 🔧 Cabeças modulares apenas onde o validador exige
+            # 🔧 Cabeçalhos modulares apenas onde o validador exige
             pod 'SDWebImage',               :modular_headers => true
 
             pod 'FirebaseABTesting',        :modular_headers => true
@@ -136,10 +135,13 @@ workflows:
           # Extensão de notificação SEM pods (independente)
           target 'ImageNotification' do
             inherit! :search_paths
-            # nada de use_frameworks! aqui também
+            # nada de use_frameworks! aqui
           end
 
           post_install do |installer|
+            # Deixe o Flutter fazer os ajustes padrão
+            flutter_post_install(installer)
+
             def append_unique(bs, key, extra)
               val = bs[key] || '$(inherited)'
               s = val.to_s
@@ -155,9 +157,11 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # 🔑 Garantir headers do Flutter para plugins ObjC:
+                # 🔑 Garantir headers p/ plugins ObjC (inclui xcframework do Flutter)
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/../Flutter/Flutter.xcframework/ios-arm64/Flutter.framework/Headers"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/../Flutter/Flutter.xcframework/ios-arm64_x86_64-simulator/Flutter.framework/Headers"')
 
                 # -ObjC ajuda a evitar símbolos perdidos
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
@@ -165,13 +169,6 @@ workflows:
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
-              end
-            end
-
-            # Também no projeto do Runner
-            installer.aggregate_targets.each do |agg|
-              agg.user_project.build_configurations.each do |config|
-                config.build_settings['SWIFT_VERSION'] = '5.0'
               end
             end
           end
@@ -207,8 +204,15 @@ workflows:
           cd ios
           pod repo update
           pod install --verbose
-          # 🚨 Falha cedo se cabeçalho do Flutter não existir
-          test -f "Pods/Headers/Public/Flutter/Flutter.h" || { echo "ERRO: Flutter.h não encontrado após pod install"; ls -R Pods/Headers/Public | sed -n '1,120p'; exit 1; }
+          echo "=== Conferindo localização do Flutter.h ==="
+          if [ -f "Pods/Headers/Public/Flutter/Flutter.h" ]; then
+            echo "OK: Pods/Headers/Public/Flutter/Flutter.h"
+          elif find Flutter/Flutter.xcframework -type f -name Flutter.h -print -quit | grep -q .; then
+            echo "OK: Flutter.h encontrado dentro de Flutter.xcframework"
+          else
+            echo "ERRO: Flutter.h não encontrado após pod install"; ls -R Pods/Headers/Public | sed -n '1,200p'
+            exit 1
+          fi
           cd ..
 
       - name: Importar certificado no keychain (sem interação)
@@ -300,7 +304,7 @@ workflows:
           set -euo pipefail
           echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|fatal error" build_logs/flutter_build_verbose.log | head -n 120 || true
+            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|fatal error" build_logs/flutter_build_verbose.log | head -n 200 || true
           else
             echo "Log build_logs/flutter_build_verbose.log não encontrado."
           fi
