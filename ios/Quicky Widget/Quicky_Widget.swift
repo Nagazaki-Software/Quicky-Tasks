@@ -22,11 +22,11 @@ struct Provider: TimelineProvider {
         )
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (UserEntry) -> ()) {
+    func getSnapshot(in context: Context, completion: @escaping (UserEntry) -> Void) {
         completion(loadEntry())
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<UserEntry>) -> ()) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<UserEntry>) -> Void) {
         let entry = loadEntry()
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
@@ -50,7 +50,7 @@ struct Provider: TimelineProvider {
     }
 }
 
-struct Quicky_WidgetEntryView : View {
+struct Quicky_WidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
@@ -67,12 +67,16 @@ struct Quicky_WidgetEntryView : View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayName)
                     .font(.headline)
+                    .lineLimit(1)
                 Text("Saldo: \(entry.saldo)")
                     .font(.caption)
+                    .lineLimit(1)
                 Text("Próxima tarefa: \(entry.nextTask)")
                     .font(.caption2)
+                    .lineLimit(1)
                 Text("Rating: \(entry.rating)")
                     .font(.caption2)
+                    .lineLimit(1)
             }
         }
         .padding()
@@ -84,11 +88,12 @@ struct Quicky_Widget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            // 👉 O toque no widget abre o app pelo URL scheme
             Quicky_WidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "quicky://open")!)
         }
         .configurationDisplayName("Quicky")
         .description("Mostra informações do usuário.")
-        // 👇 ao tocar no widget, abre o app
-        .widgetURL(URL(string: "quicky://open")!)
+        // .supportedFamilies([.systemSmall, .systemMedium, .systemLarge]) // opcional
     }
 }
