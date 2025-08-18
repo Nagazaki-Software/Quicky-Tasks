@@ -3,9 +3,12 @@ workflows:
     name: iOS Release (App Store Connect)
     environment:
       flutter: stable
-      xcode: latest
+      xcode: latest            # se quiser fixar: 16.4
       vars:
         EXPORT_PLIST_PATH: $HOME/export_options.plist
+        APP_BUNDLE_ID: com.nagazakisoftware.quick
+        EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
       groups:
         - appstore_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
         - ios_signing_files      # IOS_DISTRIBUTION_CERT (base64 do .p12) e CERTIFICATE_PASSWORD
@@ -13,6 +16,7 @@ workflows:
       cache_paths:
         - ~/.pub-cache
         - ~/Library/Caches/CocoaPods
+        - ~/.gem
 
     scripts:
       - name: Versions
@@ -32,11 +36,8 @@ workflows:
           echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
           echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-          which ruby
           ruby -v
-          which gem
           gem env home
-          which pod || true
           pod --version
 
       - name: Flutter clean, precache & pub get
@@ -47,13 +48,13 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever/Atualizar Podfile (Runner sem Firebase na extensão)
+      - name: Escrever/Atualizar Podfile (sem use_frameworks!, com headers modulares)
         script: |
           set -euo pipefail
           mkdir -p ios
           cat > ios/Podfile <<'PODFILE'
           source 'https://cdn.cocoapods.org/'
-          platform :ios, '14.0'
+          platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
           install! 'cocoapods',
@@ -80,12 +81,15 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
+          # Habilita modulemaps/cabeçalhos modulares (resolve "non-modular include")
+          use_modular_headers!
+
           # App principal
           target 'Runner' do
-            use_frameworks! :linkage => :static
+            # ⚠️ sem use_frameworks! — gera pods como libs estáticas (modelo Flutter/Firestore)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree
+            # Braintree (ok com libs estáticas)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -93,20 +97,18 @@ workflows:
             pod 'Braintree/ApplePay',      '~> 6.36'
           end
 
-          # Extensão de notificação SEM pods (independente do Firebase)
+          # Extensão de notificação — sem pods aqui; mantém independente do Firebase
           target 'ImageNotification' do
             inherit! :search_paths
-            use_frameworks! :linkage => :static
+            # ⚠️ sem use_frameworks! aqui também
           end
 
           post_install do |installer|
             installer.pods_project.targets.each do |t|
               flutter_additional_ios_build_settings(t)
               t.build_configurations.each do |c|
-                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-                if t.name == 'ImageNotification'
-                  c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
-                end
+                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
               end
             end
@@ -136,7 +138,6 @@ workflows:
           source $CM_ENV || true
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
           cd ios
-          which pod || true
           pod --version
           pod repo update
           pod install --verbose
@@ -162,11 +163,11 @@ workflows:
       - name: Criar/baixar perfis de provisionamento (App Store)
         script: |
           set -euo pipefail
-          app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+          app-store-connect fetch-signing-files "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose
-          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+          app-store-connect fetch-signing-files "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
-          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
+          app-store-connect fetch-signing-files "$EXT_WIDGET_BUNDLE_ID" \
             --type IOS_APP_STORE --create --verbose || true
 
       - name: Aplicar perfis ao projeto
@@ -174,7 +175,6 @@ workflows:
           set -euo pipefail
           xcode-project use-profiles
 
-      # >>> NOVO: gera ExportOptions.plist de forma determinística <<<
       - name: Gerar ExportOptions.plist (App Store)
         script: |
           set -euo pipefail
@@ -187,11 +187,9 @@ workflows:
           /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
 
-          # Mapa de perfis por bundle id – usa nomes dos perfis gerados pela Codemagic
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
 
           # App
-          APP_BUNDLE_ID="com.nagazakisoftware.quick"
           APP_PROFILE_NAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
             | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
             | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
@@ -200,8 +198,9 @@ workflows:
             /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
           fi
 
-          # Extensões (adiciona só se achar perfil)
-          for BID in "com.nagazakisoftware.quick.ImageNotification" "com.nagazakisoftware.quick.Quicky-Widget"; do
+          # Extensões (adiciona se achar perfil)
+          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
+            [ -n "$BID" ] || continue
             PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
               | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
               | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
@@ -214,7 +213,6 @@ workflows:
           echo "=== ExportOptions.plist ==="
           /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
 
-      # ======= build com log salvo =======
       - name: Build IPA assinado (Release)
         script: |
           set -euo pipefail
