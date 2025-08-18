@@ -48,70 +48,69 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-        - name: Escrever/Atualizar Podfile (sem use_frameworks!, sem modular_headers global)
-            script: |
-              set -euo pipefail
-              mkdir -p ios
-              cat > ios/Podfile <<'PODFILE'
-              source 'https://cdn.cocoapods.org/'
-              platform :ios, '15.0'
-              ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-              
-                  install! 'cocoapods',
-                    :warn_for_unused_master_specs_repo => false,
-                    :generate_multiple_pod_projects => false,
-                    :integrate_targets => true
-              
-                  project 'Runner', {
-                    'Debug' => :debug,
-                    'Profile' => :release,
-                    'Release' => :release,
-                  }
-              
-                  def flutter_root
-                    generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-                    raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
-                    File.foreach(generated_xcconfig) do |line|
-                      m = line.match(/FLUTTER_ROOT\=(.*)/)
-                      return m[1].strip if m
-                    end
-                    raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
-                  end
-              
-                  require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
-                  flutter_ios_podfile_setup
-              
-                  # ⚠️ Sem use_frameworks! e sem use_modular_headers! global
-                  # (Deixe CocoaPods gerar libs estáticas; é o fluxo saudável p/ Flutter/Firestore)
-              
-                  target 'Runner' do
-                    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-              
-                    # Braintree (ok com libs estáticas)
-                    pod 'Braintree/Core',          '~> 6.36'
-                    pod 'Braintree/Card',          '~> 6.36'
-                    pod 'Braintree/ThreeDSecure',  '~> 6.36'
-                    pod 'Braintree/DataCollector', '~> 6.36'
-                    pod 'Braintree/ApplePay',      '~> 6.36'
-                  end
-              
-                  # Extensão de notificação — sem pods; mantém independente
-                  target 'ImageNotification' do
-                    inherit! :search_paths
-                  end
-              
-                  post_install do |installer|
-                    installer.pods_project.targets.each do |t|
-                      flutter_additional_ios_build_settings(t)
-                      t.build_configurations.each do |c|
-                        c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                        c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-                        c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                      end
-                    end
-                  end
-                  PODFILE
+      - name: Escrever/Atualizar Podfile (sem use_frameworks!, sem modular_headers global)
+        script: |
+          set -euo pipefail
+          mkdir -p ios
+          cat > ios/Podfile <<'PODFILE'
+          source 'https://cdn.cocoapods.org/'
+          platform :ios, '15.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+          install! 'cocoapods',
+            :warn_for_unused_master_specs_repo => false,
+            :generate_multiple_pod_projects => false,
+            :integrate_targets => true
+
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
+
+          def flutter_root
+            generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+            File.foreach(generated_xcconfig) do |line|
+              m = line.match(/FLUTTER_ROOT\=(.*)/)
+              return m[1].strip if m
+            end
+            raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+          end
+
+          require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+          flutter_ios_podfile_setup
+
+          # ⚠️ Sem use_frameworks! e sem use_modular_headers! global
+          # (Deixe CocoaPods gerar libs estáticas; é o fluxo saudável p/ Flutter/Firestore)
+
+          target 'Runner' do
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+            # Braintree (ok com libs estáticas)
+            pod 'Braintree/Core',          '~> 6.36'
+            pod 'Braintree/Card',          '~> 6.36'
+            pod 'Braintree/ThreeDSecure',  '~> 6.36'
+            pod 'Braintree/DataCollector', '~> 6.36'
+            pod 'Braintree/ApplePay',      '~> 6.36'
+          end
+
+          # Extensão de notificação — sem pods; mantém independente
+          target 'ImageNotification' do
+            inherit! :search_paths
+          end
+
+          post_install do |installer|
+            installer.pods_project.targets.each do |t|
+              flutter_additional_ios_build_settings(t)
+              t.build_configurations.each do |c|
+                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+                c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+              end
+            end
+          end
+          PODFILE
 
       - name: Patch xcconfigs do Flutter para herdar Pods
         script: |
