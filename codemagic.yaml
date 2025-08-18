@@ -47,7 +47,6 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      # >>> CORRIGIDO: Heredoc sem erro e sem indentação no marcador <<<
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
@@ -56,17 +55,12 @@ workflows:
           if [ ! -f "$SWIFT_FILE" ]; then
           cat > "$SWIFT_FILE" <<'SWIFT'
           import Foundation
-
-          // Mantém o target Runner com suporte a Swift para gerar headers -Swift.h dos plugins
           @objc class SwiftDummy: NSObject {}
           SWIFT
             echo "Criado $SWIFT_FILE"
           else
             echo "Já existe $SWIFT_FILE"
           fi
-          # Mostra conteúdo (debug)
-          echo "==== Conteúdo de $SWIFT_FILE ===="
-          sed -n '1,50p' "$SWIFT_FILE" || true
 
       - name: Escrever/Atualizar Podfile (libs estáticas + modular headers seletivos)
         script: |
@@ -101,8 +95,10 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # Sem use_frameworks! e sem use_modular_headers! global (evita conflito com gRPC)
+          # ⚠️ NÃO usar global use_frameworks!/use_modular_headers!
+          # Ativamos frameworks estáticos SÓ no target Runner.
           target 'Runner' do
+            use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -138,23 +134,36 @@ workflows:
             pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # Extensão sem pods (independente do Firebase)
+          # Extensão sem pods
           target 'ImageNotification' do
             inherit! :search_paths
           end
 
           post_install do |installer|
+            # Ajustes de build p/ todos os targets
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                 c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
                 c.build_settings['SWIFT_VERSION'] = '5.0'
+                c.build_settings['ENABLE_BITCODE'] = 'NO'
+                # Garante path dos headers públicos dos Pods (resolve Flutter/Flutter.h)
+                hs = c.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+                extra = ' "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Flutter"'
+                unless hs.to_s.include?('Headers/Public/Flutter')
+                  c.build_settings['HEADER_SEARCH_PATHS'] = hs.to_s + extra
+                end
+                # -ObjC para evitar símbolos faltando em categorias ObjC
+                ld = c.build_settings['OTHER_LDFLAGS'] || '$(inherited)'
+                unless ld.to_s.include?('-ObjC')
+                  c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
+                end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
               end
             end
-            # Garante SWIFT_VERSION também no projeto do Runner
-            installer.aggregate_targets.each do |aggregate_target|
-              aggregate_target.user_project.build_configurations.each do |config|
+            # SWIFT_VERSION também no projeto do Runner
+            installer.aggregate_targets.each do |agg|
+              agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
               end
             end
@@ -296,7 +305,7 @@ workflows:
             for f in $ACTLOGS; do
               echo "--- Arquivo: $f ---"
               line=$(strings "$f" | grep -nE "error:|Swift Compiler Error|fatal error" | head -n 1 | cut -d: -f1 || true)
-              if [ -n "$line" ]; então
+              if [ -n "$line" ]; then
                 echo "Contexto (±80):"
                 start=$((line-80)); [ $start -lt 1 ] && start=1
                 end=$((line+80))
@@ -325,7 +334,7 @@ workflows:
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
-            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEYID}".p8
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           ls -l ~/.private_keys/ || true
