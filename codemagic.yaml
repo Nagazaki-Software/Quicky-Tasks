@@ -7,7 +7,7 @@ workflows:
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
-        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional (só p/ perfis)
+        EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget   # opcional
       groups:
         - appstore_credentials
         - ios_signing_files
@@ -52,11 +52,10 @@ workflows:
           set -euo pipefail
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
           mkdir -p "$(dirname "$SWIFT_FILE")"
-          # sem heredoc: impossível quebrar por indentação
           printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
           echo "Escrevi $SWIFT_FILE"
 
-      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + modular headers global)
+      - name: Escrever/Atualizar Podfile (Flutter visível + frameworks dinâmicos + modular headers)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -76,7 +75,7 @@ workflows:
             'Release' => :release,
           }
 
-          # Precisamos de módulos p/ pods Swift (Firebase/SDWebImage etc.)
+          # Precisamos de modules para pods Swift (Firebase etc.)
           use_modular_headers!
 
           def flutter_root
@@ -93,10 +92,13 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Frameworks DINÂMICOS (expõe módulo 'Flutter' aos plugins Swift)
+            # Frameworks DINÂMICOS (expõe o módulo Flutter p/ plugins ObjC/Swift)
             use_frameworks! :linkage => :dynamic
 
-            # Instala os pods do Flutter/projetos (inclui Flutter.xcframework via podhelper)
+            # 🔑 PREGAR o pod Flutter (resolve 'Flutter/Flutter.h' not found)
+            pod 'Flutter', :path => 'Flutter'
+
+            # Instala todos os pods do Flutter (plugins, etc.)
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -107,13 +109,13 @@ workflows:
             pod 'Braintree/ApplePay',      '~> 6.36'
           end
 
-          # Extensão de notificação (sem pods próprios; herda search paths)
+          # Extensão de notificação (não tem pods próprios; herda search paths)
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :dynamic
           end
 
-          # Widget NÃO é alvo de pods (o target chama "Quicky WidgetExtension")
+          # Widget NÃO entra em pods (target chama "Quicky WidgetExtension")
 
           post_install do |installer|
             def append_unique(bs, key, extra)
@@ -124,7 +126,6 @@ workflows:
               end
             end
 
-            # Ajusta pods
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 bs = c.build_settings
@@ -134,12 +135,16 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Expor módulos p/ Swift & compatibilidade binária
+                # Expor módulos p/ Swift & compat binária
                 bs['DEFINES_MODULE'] = 'YES'
                 bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
 
-                # Headers dos pods + headers dos plugins (Sources/**/include)
+                # 👉 Headers do Flutter para #import <Flutter/Flutter.h>
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Flutter/Flutter.xcframework/Headers"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Flutter/Headers"')
+
+                # E headers públicos/módulos dos pods
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
@@ -153,7 +158,7 @@ workflows:
               end
             end
 
-            # Ajusta também o projeto do Runner
+            # Ajustes no projeto do Runner (agregado)
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
