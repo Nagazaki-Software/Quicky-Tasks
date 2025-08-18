@@ -1,76 +1,286 @@
 workflows:
   ios-release:
-    name: iOS Release
+    name: iOS Release (App Store Connect)
     environment:
       flutter: stable
-      xcode: 16.4
-      cocoapods: default
-      vars:
-        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
-        EXPORT_PLIST_PATH: "ios/Runner/ExportOptions.plist"
-    scripts:
-      - name: Limpar cache Flutter
-        script: |
-          flutter clean
-          rm -rf ios/Pods ios/Podfile.lock
-          pod cache clean --all || true
+      xcode: latest
+      groups:
+        - appstore_credentials     # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
+        - ios_signing_files        # IOS_DISTRIBUTION_CERT (base64 .p12) e CERTIFICATE_PASSWORD
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ~/Library/Caches/CocoaPods
 
-      - name: Instalar dependências
+    scripts:
+      - name: Versions
         script: |
+          set -euo pipefail
+          flutter --version && xcodebuild -version
+          which ruby || true; ruby -v || true
+          which pod || true; pod --version || true
+
+      - name: Instalar CocoaPods 1.16.2 (sem rbenv)
+        script: |
+          set -euo pipefail
+          export GEM_HOME="$HOME/.gem"
+          export GEM_BIN="$GEM_HOME/bin"
+          export PATH="$GEM_BIN:$PATH"
+          /usr/bin/gem install cocoapods -v 1.16.2 -N || true
+          echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
+          echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
+          echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
+          pod --version
+
+      - name: Flutter clean, precache & pub get
+        script: |
+          set -euo pipefail
+          flutter clean
+          flutter precache --ios
           flutter pub get
+          test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
+
+      - name: Escrever Podfile (Runner normal; extensão SEM pods)
+        script: |
+          set -euo pipefail
+          mkdir -p ios
+          cat > ios/Podfile <<'PODFILE'
+          source 'https://cdn.cocoapods.org/'
+          platform :ios, '14.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+          install! 'cocoapods',
+            :warn_for_unused_master_specs_repo => false,
+            :generate_multiple_pod_projects => false,
+            :integrate_targets => true
+
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
+
+          def flutter_root
+            generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
+            File.foreach(generated_xcconfig) do |line|
+              m = line.match(/FLUTTER_ROOT\=(.*)/)
+              return m[1].strip if m
+            end
+            raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+          end
+
+          require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+          flutter_ios_podfile_setup
+
+          target 'Runner' do
+            use_frameworks! :linkage => :static
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+            # Braintree (mesmas versões usadas antes)
+            pod 'Braintree/Core',          '~> 6.36'
+            pod 'Braintree/Card',          '~> 6.36'
+            pod 'Braintree/ThreeDSecure',  '~> 6.36'
+            pod 'Braintree/DataCollector', '~> 6.36'
+            pod 'Braintree/ApplePay',      '~> 6.36'
+          end
+
+          # Extensão de notificação SEM pods
+          target 'ImageNotification' do
+            inherit! :search_paths
+            use_frameworks! :linkage => :static
+          end
+
+          post_install do |installer|
+            installer.pods_project.targets.each do |t|
+              flutter_additional_ios_build_settings(t)
+              t.build_configurations.each do |c|
+                c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+                if t.name == 'ImageNotification'
+                  c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                end
+                c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+              end
+            end
+          end
+          PODFILE
+
+      - name: Patch .xcconfig do Flutter para herdar Pods
+        script: |
+          set -euo pipefail
+          mkdir -p ios/Flutter
+          for mode in Debug Profile Release; do
+            f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
+          done
+          prepend_once () { local file="$1"; local line="$2"; grep -Fqx "$line" "$file" || { tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"; }; }
+          prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
+          prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
+          prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+
+      - name: CocoaPods install (limpo)
+        script: |
+          set -euo pipefail
+          source $CM_ENV || true
+          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
           cd ios
-          pod install --repo-update
+          pod repo update
+          pod install --verbose
           cd ..
 
-      - name: Diagnóstico bundles no archive
+      - name: Importar certificado no keychain
         script: |
-          echo "📦 Verificando bundles no archive"
-          mkdir -p build/ios/archive   # evita erro "No such file or directory"
-          find build/ios/archive || echo "Nenhum bundle gerado ainda"
+          set -euo pipefail
+          mkdir -p "$HOME/Library/MobileDevice/Certificates"
+          echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
+          KEYCHAIN_NAME="build.keychain"
+          security create-keychain -p "" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security unlock-keychain -p "" "$KEYCHAIN_NAME"
+          security import "$HOME/Library/MobileDevice/Certificates/dist.p12" \
+            -k "$KEYCHAIN_NAME" -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_NAME"
+          /usr/bin/security find-identity -v "$KEYCHAIN_NAME" || true
+
+      - name: Criar/baixar perfis de provisionamento (App Store)
+        script: |
+          set -euo pipefail
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick" \
+            --type IOS_APP_STORE --create --verbose
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.ImageNotification" \
+            --type IOS_APP_STORE --create --verbose || true
+          app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
+            --type IOS_APP_STORE --create --verbose || true
+
+      - name: Aplicar perfis ao projeto (xcodeproj)
+        script: |
+          set -euo pipefail
+          xcode-project use-profiles
+
+      - name: Gerar ExportOptions.plist (dinâmico)
+        script: |
+          set -euo pipefail
+          TEAM_ID="R78GB8US97"
+          mkdir -p ios/Runner
+
+          # Função: encontra o NOME do perfil que corresponde ao bundle id + team
+          find_profile_name () {
+            local BUNDLE="$1"; local TEAM="$2"
+            local PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+            local NAME=""
+            shopt -s nullglob
+            for f in "$PROFILE_DIR"/*.mobileprovision "$PROFILE_DIR"/*.provisionprofile; do
+              # Converte para plist e extrai campos com plutil
+              XML="$(/usr/bin/security cms -D -i "$f" 2>/dev/null || true)"
+              [ -z "$XML" ] && continue
+              TMP="$(mktemp -t profplist).plist"
+              printf '%s' "$XML" > "$TMP"
+              APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP" 2>/dev/null || true)"
+              NAME_CANDIDATE="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP" 2>/dev/null || true)"
+              rm -f "$TMP"
+              # application-identifier = TEAMID.bundle
+              case "$APP_ID" in
+                "$TEAM.$BUNDLE")
+                  NAME="$NAME_CANDIDATE"
+                  # pega o mais novo por último (como estamos iterando, o último que bate fica)
+                ;;
+              esac
+            done
+            printf '%s' "$NAME"
+          }
+
+          P_RUNNER="$(find_profile_name com.nagazakisoftware.quick "$TEAM_ID")"
+          P_IMAGE_NOTIF="$(find_profile_name com.nagazakisoftware.quick.ImageNotification "$TEAM_ID")"
+          P_WIDGET="$(find_profile_name com.nagazakisoftware.quick.Quicky-Widget "$TEAM_ID")"
+
+          echo "Perfis detectados:"
+          echo " Runner:           ${P_RUNNER:-N/D}"
+          echo " ImageNotification:${P_IMAGE_NOTIF:-N/D}"
+          echo " Widget:           ${P_WIDGET:-N/D}"
+
+          # Falhar se o principal não foi achado
+          [ -n "$P_RUNNER" ] || { echo "Perfil do Runner não encontrado"; exit 1; }
+
+          cat > ios/Runner/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+            <key>uploadBitcode</key><false/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.nagazakisoftware.quick</key><string>${P_RUNNER}</string>
+          EOF
+
+          # Adiciona se existirem
+          if [ -n "$P_IMAGE_NOTIF" ]; then
+            printf '              <key>com.nagazakisoftware.quick.ImageNotification</key><string>%s</string>\n' "$P_IMAGE_NOTIF" >> ios/Runner/ExportOptions.plist
+          fi
+          if [ -n "$P_WIDGET" ]; then
+            printf '              <key>com.nagazakisoftware.quick.Quicky-Widget</key><string>%s</string>\n' "$P_WIDGET" >> ios/Runner/ExportOptions.plist
+          fi
+
+          cat >> ios/Runner/ExportOptions.plist <<'EOF'
+            </dict>
+          </dict>
+          </plist>
+          EOF
+
+          echo "== ExportOptions.plist gerado em ios/Runner/ExportOptions.plist =="
+          cat ios/Runner/ExportOptions.plist
 
       - name: Build IPA assinado (Release)
         script: |
           set -euo pipefail
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
-
-          LOG_DIR="build/logs"
-          mkdir -p "$LOG_DIR"
-          BUILD_LOG="$LOG_DIR/flutter_build_ipa.log"
-
-          set +e
-          flutter build ipa --release -v \
+          flutter build ipa --release \
             --build-number="$FLUTTER_BUILD_NUMBER" \
-            --export-options-plist="$EXPORT_PLIST_PATH" \
-            2>&1 | tee "$BUILD_LOG"
-          STATUS=${PIPESTATUS[0]}
-          set -e
+            --export-options-plist="ios/Runner/ExportOptions.plist"
 
-          if [ $STATUS -ne 0 ]; then
-            echo ""
-            echo "===== RESUMO DE ERROS (com contexto) ====="
-            GREP_PAT='error:|fatal error:|Swift( Compiler)? Error|clang: error|ld: |Undefined symbols for architecture|Command .* failed with a nonzero exit code|provision|Code ?sign|codesign|entitlement|ARCHIVE FAILED|No such file or directory|The operation couldn.t be completed'
-            FIRST=$(grep -nEi "$GREP_PAT" "$BUILD_LOG" | head -n1 | cut -d: -f1)
-            if [ -n "$FIRST" ]; then
-              START=$(( FIRST>25 ? FIRST-25 : 1 ))
-              END=$(( FIRST+60 ))
-              nl -ba "$BUILD_LOG" | sed -n "${START},${END}p"
-            else
-              echo "(nenhuma linha bateu – imprimindo últimas 400)"
-              tail -n 400 "$BUILD_LOG"
-            fi
+      - name: Upload para App Store Connect (TestFlight)
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
+          test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
 
-            echo ""
-            echo "===== (Últimas 500 linhas) ====="
-            tail -n 500 "$BUILD_LOG" || true
+          : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER (Key ID)}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID (Issuer ID)}"
+          : "${APP_STORE_CONNECT_PRIVATE_KEY:?Falta APP_STORE_CONNECT_PRIVATE_KEY (.p8 ou base64)}"
 
-            exit $STATUS
+          mkdir -p ~/.private_keys
+          KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
+
+          if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
+          else
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
+          chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
+          ls -l ~/.private_keys/ || true
 
-          echo "✅ Build OK. Log completo em: $BUILD_LOG"
+          xcrun altool --upload-app \
+            --type ios \
+            -f "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --verbose
+
+          echo "Upload disparado: $IPA_PATH"
+
+      - name: Diagnóstico bundles no archive
+        script: |
+          set -euo pipefail
+          find build/ios/archive -maxdepth 3 -type d -name "*.app" -or -name "*.appex" || true
 
     artifacts:
       - build/ios/ipa/*.ipa
-      - build/logs/*.log
-      - flutter_drive.log
+      - build/ios/**/*.xcarchive
