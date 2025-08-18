@@ -26,21 +26,13 @@ struct Provider: TimelineProvider {
     }
 
     private func loadEntry() -> UserEntry {
-        // ATENÇÃO: use seu App Group correto
         let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick")
         let displayName = defaults?.string(forKey: "display_name") ?? ""
         let photoUrl = defaults?.string(forKey: "photo_url").flatMap { URL(string: $0) }
         let saldo = defaults?.string(forKey: "saldo") ?? ""
         let nextTask = defaults?.string(forKey: "nexttask") ?? ""
         let rating = defaults?.string(forKey: "rating") ?? ""
-        return UserEntry(
-            date: Date(),
-            displayName: displayName,
-            photoUrl: photoUrl,
-            saldo: saldo,
-            nextTask: nextTask,
-            rating: rating
-        )
+        return UserEntry(date: Date(), displayName: displayName, photoUrl: photoUrl, saldo: saldo, nextTask: nextTask, rating: rating)
     }
 }
 
@@ -50,7 +42,6 @@ struct Quicky_WidgetEntryView: View {
     var body: some View {
         HStack(alignment: .center) {
             if let url = entry.photoUrl {
-                // AsyncImage está disponível no iOS 15+. Como seu target é iOS 16, ok.
                 AsyncImage(url: url) { image in
                     image.resizable()
                 } placeholder: {
