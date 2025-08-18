@@ -1,30 +1,38 @@
-// ios/Quicky Widget/AppIntent.swift
+//
+//  AppIntent.swift
+//  Quicky Widget
+//
+//  Compile ONLY in the Widget Extension target.
+//
 
-#if canImport(WidgetKit) && canImport(AppIntents)
+#if canImport(WidgetKit)
 import WidgetKit
+#endif
+
+#if canImport(AppIntents)
 import AppIntents
 
-// Intent de configuração do Widget (não precisa de perform())
-@available(iOS 16.0, *)
+// Disponível a partir do iOS 16 em extensões.
 @available(iOSApplicationExtension 16.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Configuration"
-    static var description = IntentDescription("Quicky widget configuration.")
+    static var description = IntentDescription("Configurações do widget.")
 
     @Parameter(title: "Favorite Emoji", default: "😃")
     var favoriteEmoji: String
 }
 
-// (Opcional) Se quiser manter uma action, deixe o perform mais “simples” possível
-@available(iOS 16.0, *)
 @available(iOSApplicationExtension 16.0, *)
 struct QuickyActionIntent: AppIntent {
     static var title: LocalizedStringResource = "Quicky Action"
-    static var description = IntentDescription("Simple action for the widget.")
+    static var description = IntentDescription("Executa uma ação simples do widget.")
+
+    @Parameter(title: "Message")
+    var message: String?
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        // Nada que exija abrir app aqui; apenas finalize.
+        // ação “no-op” para ser sempre válida
         return .result()
     }
 }
