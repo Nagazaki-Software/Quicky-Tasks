@@ -62,7 +62,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (libs estáticas + modular headers seletivos)
+      - name: Escrever/Atualizar Podfile (consistência de use_frameworks! nos targets)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -95,8 +95,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # ⚠️ NÃO usar global use_frameworks!/use_modular_headers!
-          # Ativamos frameworks estáticos SÓ no target Runner.
+          # Runner como frameworks estáticos (resolve headers/módulos p/ plugins)
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -108,9 +107,8 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # ===== Modular headers exigidos pelo validator =====
+            # Modular headers seletivos (Firebase + dependências pedidas pelo validator)
             pod 'SDWebImage',               :modular_headers => true
-
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
             pod 'FirebaseCoreInternal',     :modular_headers => true
@@ -118,12 +116,10 @@ workflows:
             pod 'GoogleDataTransport',      :modular_headers => true
             pod 'FirebaseInstallations',    :modular_headers => true
             pod 'nanopb',                   :modular_headers => true
-
             pod 'FirebaseAuthInterop',      :modular_headers => true
             pod 'FirebaseAppCheckInterop',  :modular_headers => true
             pod 'FirebaseMessagingInterop', :modular_headers => true
             pod 'RecaptchaInterop',         :modular_headers => true
-
             pod 'FirebaseAuth',             :modular_headers => true
             pod 'FirebaseFirestore',        :modular_headers => true
             pod 'FirebaseFirestoreInternal',:modular_headers => true
@@ -134,34 +130,38 @@ workflows:
             pod 'FirebaseABTesting',        :modular_headers => true
           end
 
-          # Extensão sem pods
+          # A extensão EMBEDDA no Runner PRECISA bater com use_frameworks! do host
           target 'ImageNotification' do
             inherit! :search_paths
+            use_frameworks! :linkage => :static
           end
 
           post_install do |installer|
-            # Ajustes de build p/ todos os targets
             installer.pods_project.targets.each do |t|
               t.build_configurations.each do |c|
                 c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                 c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
                 c.build_settings['SWIFT_VERSION'] = '5.0'
                 c.build_settings['ENABLE_BITCODE'] = 'NO'
-                # Garante path dos headers públicos dos Pods (resolve Flutter/Flutter.h)
+                # Header search p/ Flutter/Flutter.h quando estático
                 hs = c.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
                 extra = ' "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Flutter"'
                 unless hs.to_s.include?('Headers/Public/Flutter')
                   c.build_settings['HEADER_SEARCH_PATHS'] = hs.to_s + extra
                 end
-                # -ObjC para evitar símbolos faltando em categorias ObjC
+                # -ObjC evita símbolos faltando
                 ld = c.build_settings['OTHER_LDFLAGS'] || '$(inherited)'
                 unless ld.to_s.include?('-ObjC')
                   c.build_settings['OTHER_LDFLAGS'] = ld.to_s + ' -ObjC'
                 end
                 c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+                # App extension deve respeitar API-only
+                if t.name == 'ImageNotification'
+                  c.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                end
               end
             end
-            # SWIFT_VERSION também no projeto do Runner
+            # SWIFT_VERSION também no projeto Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -305,7 +305,7 @@ workflows:
             for f in $ACTLOGS; do
               echo "--- Arquivo: $f ---"
               line=$(strings "$f" | grep -nE "error:|Swift Compiler Error|fatal error" | head -n 1 | cut -d: -f1 || true)
-              if [ -n "$line" ]; then
+              if [ -n "$line" ]; então
                 echo "Contexto (±80):"
                 start=$((line-80)); [ $start -lt 1 ] && start=1
                 end=$((line+80))
