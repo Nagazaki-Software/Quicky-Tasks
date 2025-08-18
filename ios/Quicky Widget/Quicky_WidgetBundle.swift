@@ -1,26 +1,18 @@
-//
 //  Quicky_WidgetBundle.swift
-//  Quicky Widget
-//
-//  Created by Enzo Godoy on 14/08/2025.
-//
 
 import WidgetKit
 import SwiftUI
-
 #if canImport(ActivityKit)
 import ActivityKit
 #endif
 
 @main
-@available(iOSApplicationExtension 16.0, *)
 struct Quicky_WidgetBundle: WidgetBundle {
-    @WidgetBundleBuilder
     var body: some Widget {
-        // Widget “normal” disponível a partir do iOS 16.0 em extensão
+        // Widget normal (iOS 14+)
         Quicky_Widget()
 
-        // Live Activity só se o SDK tiver ActivityKit e o SO for 16.1+
+        // Live Activity só em 16.1+ e somente se ActivityKit existir
         #if canImport(ActivityKit)
         if #available(iOSApplicationExtension 16.1, *) {
             Quicky_WidgetLiveActivity()
@@ -28,4 +20,3 @@ struct Quicky_WidgetBundle: WidgetBundle {
         #endif
     }
 }
-
