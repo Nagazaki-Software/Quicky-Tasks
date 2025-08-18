@@ -33,7 +33,7 @@ struct Provider: TimelineProvider {
     }
 
     private func loadEntry() -> UserEntry {
-        let defaults = UserDefaults(suiteName: "group.com.quicky")
+        let defaults = UserDefaults(suiteName: "group.com.nagazakisoftware.quick")
         let displayName = defaults?.string(forKey: "display_name") ?? ""
         let photoUrl = defaults?.string(forKey: "photo_url").flatMap { URL(string: $0) }
         let saldo = defaults?.string(forKey: "saldo") ?? ""
