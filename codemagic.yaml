@@ -4,9 +4,11 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+      vars:
+        EXPORT_PLIST_PATH: $HOME/export_options.plist
       groups:
-        - appstore_credentials     # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
-        - ios_signing_files        # IOS_DISTRIBUTION_CERT (base64 .p12) e CERTIFICATE_PASSWORD
+        - appstore_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
+        - ios_signing_files      # IOS_DISTRIBUTION_CERT (base64 do .p12) e CERTIFICATE_PASSWORD
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -20,7 +22,7 @@ workflows:
           which ruby || true; ruby -v || true
           which pod || true; pod --version || true
 
-      - name: Instalar CocoaPods 1.16.2 (sem rbenv)
+      - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
         script: |
           set -euo pipefail
           export GEM_HOME="$HOME/.gem"
@@ -40,7 +42,7 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Escrever Podfile (Runner normal; extensão SEM pods)
+      - name: Escrever/Atualizar Podfile (Runner sem Firebase na extensão)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -73,11 +75,12 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
+          # App principal
           target 'Runner' do
             use_frameworks! :linkage => :static
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (mesmas versões usadas antes)
+            # Braintree
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -85,7 +88,7 @@ workflows:
             pod 'Braintree/ApplePay',      '~> 6.36'
           end
 
-          # Extensão de notificação SEM pods
+          # Extensão de notificação SEM pods (independente do Firebase)
           target 'ImageNotification' do
             inherit! :search_paths
             use_frameworks! :linkage => :static
@@ -105,17 +108,22 @@ workflows:
           end
           PODFILE
 
-      - name: Patch .xcconfig do Flutter para herdar Pods
+      - name: Patch xcconfigs do Flutter para herdar Pods
         script: |
           set -euo pipefail
           mkdir -p ios/Flutter
           for mode in Debug Profile Release; do
             f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
           done
-          prepend_once () { local file="$1"; local line="$2"; grep -Fqx "$line" "$file" || { tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"; }; }
+          prepend_once () {
+            local file="$1"; local line="$2"
+            if grep -Fqx "$line" "$file"; then return 0; fi
+            tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"
+          }
           prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
+          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
 
       - name: CocoaPods install (limpo)
         script: |
@@ -127,7 +135,7 @@ workflows:
           pod install --verbose
           cd ..
 
-      - name: Importar certificado no keychain
+      - name: Importar certificado no keychain (sem interação)
         script: |
           set -euo pipefail
           mkdir -p "$HOME/Library/MobileDevice/Certificates"
@@ -154,88 +162,24 @@ workflows:
           app-store-connect fetch-signing-files "com.nagazakisoftware.quick.Quicky-Widget" \
             --type IOS_APP_STORE --create --verbose || true
 
-      - name: Aplicar perfis ao projeto (xcodeproj)
+      - name: Aplicar perfis ao projeto e gerar ExportOptions
         script: |
           set -euo pipefail
+          # Aplica perfis no .xcodeproj (gera /Users/builder/export_options.plist)
           xcode-project use-profiles
 
-      - name: Gerar ExportOptions.plist (dinâmico)
-        script: |
-          set -euo pipefail
-          TEAM_ID="R78GB8US97"
-          mkdir -p ios/Runner
-
-          # Função: encontra o NOME do perfil que corresponde ao bundle id + team
-          find_profile_name () {
-            local BUNDLE="$1"; local TEAM="$2"
-            local PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-            local NAME=""
-            shopt -s nullglob
-            for f in "$PROFILE_DIR"/*.mobileprovision "$PROFILE_DIR"/*.provisionprofile; do
-              # Converte para plist e extrai campos com plutil
-              XML="$(/usr/bin/security cms -D -i "$f" 2>/dev/null || true)"
-              [ -z "$XML" ] && continue
-              TMP="$(mktemp -t profplist).plist"
-              printf '%s' "$XML" > "$TMP"
-              APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP" 2>/dev/null || true)"
-              NAME_CANDIDATE="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP" 2>/dev/null || true)"
-              rm -f "$TMP"
-              # application-identifier = TEAMID.bundle
-              case "$APP_ID" in
-                "$TEAM.$BUNDLE")
-                  NAME="$NAME_CANDIDATE"
-                  # pega o mais novo por último (como estamos iterando, o último que bate fica)
-                ;;
-              esac
-            done
-            printf '%s' "$NAME"
-          }
-
-          P_RUNNER="$(find_profile_name com.nagazakisoftware.quick "$TEAM_ID")"
-          P_IMAGE_NOTIF="$(find_profile_name com.nagazakisoftware.quick.ImageNotification "$TEAM_ID")"
-          P_WIDGET="$(find_profile_name com.nagazakisoftware.quick.Quicky-Widget "$TEAM_ID")"
-
-          echo "Perfis detectados:"
-          echo " Runner:           ${P_RUNNER:-N/D}"
-          echo " ImageNotification:${P_IMAGE_NOTIF:-N/D}"
-          echo " Widget:           ${P_WIDGET:-N/D}"
-
-          # Falhar se o principal não foi achado
-          [ -n "$P_RUNNER" ] || { echo "Perfil do Runner não encontrado"; exit 1; }
-
-          cat > ios/Runner/ExportOptions.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>app-store</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>teamID</key><string>${TEAM_ID}</string>
-            <key>stripSwiftSymbols</key><true/>
-            <key>uploadSymbols</key><true/>
-            <key>compileBitcode</key><false/>
-            <key>uploadBitcode</key><false/>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.nagazakisoftware.quick</key><string>${P_RUNNER}</string>
-          EOF
-
-          # Adiciona se existirem
-          if [ -n "$P_IMAGE_NOTIF" ]; then
-            printf '              <key>com.nagazakisoftware.quick.ImageNotification</key><string>%s</string>\n' "$P_IMAGE_NOTIF" >> ios/Runner/ExportOptions.plist
+          # Copia de forma "idempotente" para o caminho que o Flutter espera
+          SRC="/Users/builder/export_options.plist"
+          DEST="ios/Runner/ExportOptions.plist"
+          if [ -f "$SRC" ]; then
+            mkdir -p ios/Runner
+            # Evita o erro "are identical" do cp
+            cat "$SRC" > "$DEST"
+            echo "ExportOptions.plist salvo em $DEST"
+          else
+            echo "ATENÇÃO: $SRC não existe. Verifique os perfis."
+            exit 1
           fi
-          if [ -n "$P_WIDGET" ]; then
-            printf '              <key>com.nagazakisoftware.quick.Quicky-Widget</key><string>%s</string>\n' "$P_WIDGET" >> ios/Runner/ExportOptions.plist
-          fi
-
-          cat >> ios/Runner/ExportOptions.plist <<'EOF'
-            </dict>
-          </dict>
-          </plist>
-          EOF
-
-          echo "== ExportOptions.plist gerado em ios/Runner/ExportOptions.plist =="
-          cat ios/Runner/ExportOptions.plist
 
       - name: Build IPA assinado (Release)
         script: |
@@ -243,7 +187,7 @@ workflows:
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
           flutter build ipa --release \
-            --build-number="$FLUTTER_BUILD_NUMBER" \
+            --build-number=$FLUTTER_BUILD_NUMBER \
             --export-options-plist="ios/Runner/ExportOptions.plist"
 
       - name: Upload para App Store Connect (TestFlight)
