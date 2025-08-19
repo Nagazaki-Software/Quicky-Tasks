@@ -53,7 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # 🔧 Gera module maps p/ pods que não definem módulos (GoogleUtilities, SDWebImage, etc.)
+          # 🔧 Gera module maps p/ pods que não definem módulos
           use_modular_headers!
 
           install! 'cocoapods',
@@ -156,6 +156,8 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
+          # 🔁 Recria o podspec do Flutter limpinho para evitar "Flutter/Flutter.h not found"
+          rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
           pod install --verbose
@@ -164,8 +166,29 @@ workflows:
       - name: Patch SignInWithAppleError.swift (temporário)
         script: |
           set -euo pipefail
-          perl -0pi -e "s/(\s*)(case \\.notInteractive:)/\\1\\/\\/\\2/; s/(\s*)(case \\.matchedExcludedCredential:)/\\1\\/\\/\\2/" \
-            ios/Pods/sign_in_with_apple/sign_in_with_apple/Sources/sign_in_with_apple/SignInWithAppleError.swift
+          # Procura o arquivo nos symlinks de plugins (padrão do Flutter) e, se faltar, tenta em Pods
+          CANDIDATOS=$(find ios/.symlinks/plugins -type f -name 'SignInWithAppleError.swift' 2>/dev/null || true)
+          if [ -z "$CANDIDATOS" ]; then
+            CANDIDATOS=$(find ios/Pods -type f -name 'SignInWithAppleError.swift' 2>/dev/null || true)
+          fi
+
+          echo "Arquivos a patchar:"
+          printf '%s\n' "$CANDIDATOS"
+
+          if [ -z "$CANDIDATOS" ]; then
+            echo "Nenhum SignInWithAppleError.swift encontrado. Seguindo sem patch."
+            exit 0
+          fi
+
+          # Comenta os cases problemáticos (iOS 15+), evitando erro de compilação em Xcode 15/16
+          for F in $CANDIDATOS; do
+            # BSD sed no macOS usa -i ''
+            sed -i '' \
+              -e 's/^\([[:space:]]*\)case \.notInteractive:/\1\/\/case .notInteractive: \/\/ [patched]/' \
+              -e 's/^\([[:space:]]*\)case \.matchedExcludedCredential:/\1\/\/case .matchedExcludedCredential: \/\/ [patched]/' \
+              "$F" || true
+            echo "Patchei: $F"
+          done
 
       - name: Importar certificado no keychain (sem interação)
         script: |
