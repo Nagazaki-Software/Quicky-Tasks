@@ -55,7 +55,6 @@ workflows:
             <dict>
               <key>CFBundleDevelopmentRegion</key>
               <string>$(DEVELOPMENT_LANGUAGE)</string>
-
               <key>CFBundleDisplayName</key>
               <string>Quicky</string>
               <key>CFBundleExecutable</key>
@@ -73,7 +72,6 @@ workflows:
               <key>CFBundleSignature</key>
               <string>????</string>
 
-              <!-- URL schemes -->
               <key>CFBundleURLTypes</key>
               <array>
                 <!-- Firebase/Auth -->
@@ -109,7 +107,7 @@ workflows:
                 </dict>
               </array>
 
-              <!-- Permite app-switch Venmo/PayPal -->
+              <!-- App-switch Venmo/PayPal -->
               <key>LSApplicationQueriesSchemes</key>
               <array>
                 <string>venmo</string>
@@ -126,7 +124,6 @@ workflows:
 
               <key>CFBundleVersion</key>
               <string>$(FLUTTER_BUILD_NUMBER)</string>
-
               <key>LSRequiresIPhoneOS</key>
               <true/>
 
@@ -170,17 +167,38 @@ workflows:
               <key>UIViewControllerBasedStatusBarAppearance</key>
               <false/>
 
-              <!-- Criptografia (ajuste se usar não-isenta) -->
               <key>ITSAppUsesNonExemptEncryption</key>
               <false/>
-
               <key>UIApplicationSupportsIndirectInputEvents</key>
               <true/>
             </dict>
           </plist>
           PLIST
 
-      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5, caminhos do Flutter)
+      - name: (Opcional) Criar/atualizar Runner.entitlements (Sign in with Apple)
+        script: |
+          set -euo pipefail
+          ENT=ios/Runner/Runner.entitlements
+          mkdir -p ios/Runner
+          if [ ! -f "$ENT" ]; then
+            cat > "$ENT" <<'ENTXML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+              <dict>
+                <key>com.apple.developer.applesignin</key>
+                <array>
+                  <string>Default</string>
+                </array>
+              </dict>
+            </plist>
+            ENTXML
+            echo "Runner.entitlements criado (ajuste/remoção se não usar)."
+          else
+            echo "Runner.entitlements já existe; não alterado."
+          fi
+
+      - name: Escrever/Atualizar Podfile (com caminhos corretos do Flutter)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -245,63 +263,38 @@ workflows:
                   bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
+                  # HEADERS do Flutter
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
                     '$(PODS_ROOT)/Headers/Public/**',
                     '$(SRCROOT)/Flutter',
                     '$(PROJECT_DIR)/Flutter',
-                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
-                    '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
-                    '$(PODS_ROOT)/../Flutter/Flutter.framework/Headers',
-                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter/Flutter.framework/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Headers'
                   ].join(' ')
 
+                  # Frameworks: inclui as slices reais do xcframework
                   bs['FRAMEWORK_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)',
-                    '$(PODS_ROOT)/Flutter',
-                    '$(SRCROOT)/Flutter',
-                    '$(PODS_ROOT)/../Flutter',
-                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
+                    '$(SRCROOT)/Flutter',
+                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64'
                   ].join(' ')
 
-                  bs['LIBRARY_SEARCH_PATHS'] = [
-                    '$(inherited)',
-                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter'
-                  ].join(' ')
-
-                  # Ajuda o Swift a encontrar o modulemap/headers do Flutter
+                  # SWIFT include (opcional)
                   bs['SWIFT_INCLUDE_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers'
                   ].join(' ')
 
-                  existing_swift_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
-                  bs['OTHER_SWIFT_FLAGS'] = [
-                    existing_swift_flags,
-                    '-Xcc',
-                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
-                  ].join(' ')
-
-                  existing_c_flags = bs['OTHER_CFLAGS'] || '$(inherited)'
-                  bs['OTHER_CFLAGS'] = [
-                    existing_c_flags,
-                    '-fmodules',
-                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
-                  ].join(' ')
-
-                  existing_cc_flags = bs['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
-                  bs['OTHER_CPLUSPLUSFLAGS'] = [
-                    existing_cc_flags,
-                    '-fmodules',
-                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
-                  ].join(' ')
+                  # Removido: NÃO forçar -fmodule-map-file (causava "module map ... not found")
+                  bs['OTHER_SWIFT_FLAGS'] = ['$(inherited)'].join(' ')
+                  bs['OTHER_CFLAGS'] = ['$(inherited)'].join(' ')
+                  bs['OTHER_CPLUSPLUSFLAGS'] = ['$(inherited)'].join(' ')
 
                   if t.name == 'ImageNotification'
                     bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
@@ -334,11 +327,57 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          rm -f ios/Flutter/Flutter.podspec
+          # manter/atualizar Flutter.podspec automatico via podhelper
           cd ios
           pod repo update
           pod install --verbose
           cd ..
+
+      - name: Garantir modulemap do Flutter (se faltando)
+        script: |
+          set -euo pipefail
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          FLUTTER_ROOT=""
+          if [ -f "$FLUTTER_XCC" ]; then
+            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
+          fi
+          echo "FLUTTER_ROOT: ${FLUTTER_ROOT:-<desconhecido>}"
+
+          # Locais candidatos do Flutter.framework
+          CANDIDATES=()
+          [ -n "$FLUTTER_ROOT" ] && CANDIDATES+=("$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework")
+          [ -n "$FLUTTER_ROOT" ] && CANDIDATES+=("$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework")
+          CANDIDATES+=("ios/Flutter/Flutter.framework")
+          CANDIDATES+=("ios/.symlinks/flutter/ios/Flutter/Flutter.framework")
+          CANDIDATES+=("ios/Pods/Flutter/Flutter.framework")
+
+          CREATED=0
+          for FWF in "${CANDIDATES[@]}"; do
+            if [ -d "$FWF" ]; then
+              MOD="$FWF/Modules/module.modulemap"
+              HDR="$FWF/Headers/Flutter.h"
+              if [ -f "$MOD" ]; then
+                echo "OK: modulemap existe em $MOD"
+              else
+                echo "Criando modulemap em $MOD"
+                mkdir -p "$(dirname "$MOD")"
+                cat > "$MOD" <<'MMAP'
+                module Flutter {
+                  umbrella header "Flutter.h"
+                  export *
+                  module * { export * }
+                }
+                MMAP
+                if [ -f "$HDR" ]; then
+                  echo "Modulemap criado para $FWF"
+                  CREATED=$((CREATED+1))
+                else
+                  echo "Aviso: $HDR não encontrado (mas modulemap criado assim mesmo)."
+                fi
+              fi
+            fi
+          done
+          echo "Modulemaps criados: $CREATED"
 
       - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
@@ -360,19 +399,6 @@ workflows:
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
           patch_dir "$HOME/.pub-cache/git"
-
-          # Também patchar possíveis cabeçalhos do SDK do Flutter (ex.: integration_test)
-          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
-          if [ -f "$FLUTTER_XCC" ]; then
-            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
-            if [ -n "${FLUTTER_ROOT:-}" ] && [ -d "$FLUTTER_ROOT" ]; then
-              IT_HDR="$FLUTTER_ROOT/packages/integration_test/ios/integration_test/Sources/integration_test/include/IntegrationTestPlugin.h"
-              if [ -f "$IT_HDR" ] && grep -qE "$PATTERN" "$IT_HDR"; then
-                perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$IT_HDR"
-                echo "Patchei: $IT_HDR"
-              fi
-            fi
-          fi
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
