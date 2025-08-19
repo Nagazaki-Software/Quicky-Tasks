@@ -180,29 +180,6 @@ workflows:
           </plist>
           PLIST
 
-      - name: (Opcional) Criar/atualizar Runner.entitlements (Sign in with Apple)
-        script: |
-          set -euo pipefail
-          ENT=ios/Runner/Runner.entitlements
-          mkdir -p ios/Runner
-          if [ ! -f "$ENT" ]; then
-            cat > "$ENT" <<'ENTXML'
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-              <dict>
-                <key>com.apple.developer.applesignin</key>
-                <array>
-                  <string>Default</string>
-                </array>
-              </dict>
-            </plist>
-            ENTXML
-            echo "Runner.entitlements criado com Sign in with Apple (ajuste se não usar)."
-          else
-            echo "Runner.entitlements já existe; não alterado."
-          fi
-
       - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5, caminhos do Flutter)
         script: |
           set -euo pipefail
