@@ -53,7 +53,6 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # ✅ Ajuda com Xcode 15/16 + plugins
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -98,9 +97,7 @@ workflows:
                   bs = c.build_settings
 
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                  # ⚠️ Xcode aceita "5" ou "5.0". Isso ativa o modo Swift 5.x (cobre 5.6+).
-                  bs['SWIFT_VERSION'] = '5.0'
-
+                  bs['SWIFT_VERSION'] = '5.0'   # Swift 5.x (cobre 5.6)
                   bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
@@ -111,7 +108,7 @@ workflows:
                   bs['USE_HEADERMAP'] = 'YES'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # 🔎 Caminhos do Flutter p/ TODOS os pods (ex.: wakelock_plus)
+                  # 🔎 Caminhos do Flutter p/ TODOS os pods (inclui possíveis locais)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -119,6 +116,9 @@ workflows:
                     '$(SRCROOT)/Flutter',
                     '$(PROJECT_DIR)/Flutter',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/../Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter/Flutter.framework/Headers',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
                   ].join(' ')
@@ -128,6 +128,8 @@ workflows:
                     '$(PODS_ROOT)',
                     '$(PODS_ROOT)/Flutter',
                     '$(SRCROOT)/Flutter',
+                    '$(PODS_ROOT)/../Flutter',
+                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
@@ -163,27 +165,30 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          # 💊 ajuda muito no CI
+          # Evita podspec travado
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
           pod install --verbose
           cd ..
 
-      - name: Patch imports de Flutter nos plugins (Objective-C)
+      - name: Patch imports de Flutter nos plugins (Obj-C e Obj-C++)
         script: |
           set -euo pipefail
-          # Troca '#import <Flutter/Flutter.h>' ou com aspas -> '@import Flutter;'
-          patch_file() {
+          patch_one() {
             local F="$1"
-            if grep -qE '#import[[:space:]]*<Flutter/Flutter\.h>|#import[[:space:]]*"Flutter/Flutter\.h"' "$F"; then
-              sed -i '' -E 's/#import[[:space:]]*<Flutter\/Flutter\.h>/@import Flutter;/' "$F"
-              sed -i '' -E 's/#import[[:space:]]*"Flutter\/Flutter\.h"/@import Flutter;/' "$F"
+            if grep -qE '#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]' "$F"; then
+              # troca include por módulo (funciona melhor com Xcode 15/16)
+              perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$F"
               echo "Patchei import em: $F"
             fi
           }
-          find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
-          find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
+          # Plugins via symlink
+          find ios/.symlinks/plugins -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' \) -print0 2>/dev/null | \
+            while IFS= read -r -d '' F; do patch_one "$F"; done
+          # Cache do pub (cobre wakelock_plus/messages.g.m)
+          find "$HOME/.pub-cache" -type f -path "*ios*" \( -name '*.h' -o -name '*.m' -o -name '*.mm' \) -print0 2>/dev/null | \
+            while IFS= read -r -d '' F; do patch_one "$F"; done
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
@@ -257,7 +262,6 @@ workflows:
           status=${PIPESTATUS[0]}
           echo "export BUILD_STATUS=$status" >> $CM_ENV
           echo "Build terminou com status: $status"
-          # Continua para rodar o diagnóstico
           exit 0
 
       - name: Diagnóstico pós-build (Swift/Clang)
@@ -266,11 +270,13 @@ workflows:
           source $CM_ENV || true
           echo "----- PRIMEIRA linha com error/fatal -----"
           grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
-          echo "----- 200 linhas ao redor -----"
-          awk '
-            /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
-            {a[NR%400]=$0}
-          ' build_logs/flutter_build_verbose.log || true
+          echo "----- 120 linhas ao redor -----"
+          line=$(grep -m1 -nE "error:|fatal error:" build_logs/flutter_build_verbose.log | cut -d: -f1 || echo 0)
+          if [ "$line" -gt 0 ]; then
+            start=$((line-60)); [ "$start" -lt 1 ] && start=1
+            end=$((line+60))
+            sed -n "${start},${end}p" build_logs/flutter_build_verbose.log || true
+          fi
           echo "Status capturado: ${BUILD_STATUS:-0}"
 
       - name: Upload para App Store Connect (TestFlight)
