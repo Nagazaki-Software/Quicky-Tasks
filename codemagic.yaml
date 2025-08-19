@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (use_frameworks! estático)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos + tolerância a headers não-modulares)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,8 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Frameworks estáticos evitam o erro de "Swift pods as static libraries" e
-          # funcionam bem com Firebase, GoogleUtilities, SDWebImage etc.
+          # Evita o erro "Swift pods as static libraries" sem exigir module maps antigos.
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -97,12 +96,20 @@ workflows:
               flutter_additional_ios_build_settings(t)
               t.build_configurations.each do |c|
                 bs = c.build_settings
-                # Alvo mínimo coerente
+                # Alinhamento iOS/Swift
                 bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                # Não force versão de Swift; use a do Xcode (16.2 -> Swift 5.10).
+                # Use a versão de Swift do Xcode (16.2 -> Swift 5.10)
                 bs.delete('SWIFT_VERSION')
-                # Nada de flags agressivas; deixe o CocoaPods gerar módulos dos frameworks.
+
+                # 🔧 Tolerar includes não-modulares dentro de frameworks (GoogleUtilities, SDWebImage etc.)
+                bs['CLANG_ENABLE_MODULES'] = 'YES'
+                bs['DEFINES_MODULE'] = 'YES'
+                bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+
+                # Evitar problemas de interface evolutiva desnecessária
                 bs.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
+
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
@@ -209,17 +216,17 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (contexto do erro Swift)
+      - name: Diagnóstico pós-build (Swift/Clang)
         script: |
           set -euo pipefail
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- Blocos de erro Swift (com contexto) -----"
+            echo "----- Erros de Swift/Clang (com contexto) -----"
             awk '
-              /Swift(EmitModule|Compile).*error|error:.*Swift/ {print ">>>", $0; c=1; next}
-              c>0 {print; if(++c>80) c=0}
-            ' build_logs/flutter_build_verbose.log | sed -n '1,400p' || true
+              /Swift(EmitModule|Compile).*error|error:.*Swift|clang: error:| fatal error: / {print ">>>", $0; c=1; next}
+              c>0 {print; if(++c>120) c=0}
+            ' build_logs/flutter_build_verbose.log | sed -n '1,600p' || true
             echo "----- Indicadores comuns -----"
-            grep -nE "failed to verify module interface|no such module|Undefined symbols for architecture|modulemap" build_logs/flutter_build_verbose.log || true
+            grep -nE "non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface" build_logs/flutter_build_verbose.log || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
