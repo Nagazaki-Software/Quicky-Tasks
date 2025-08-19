@@ -4,6 +4,7 @@
   <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
+
     <key>CFBundleDisplayName</key>
     <string>Quicky</string>
     <key>CFBundleExecutable</key>
@@ -21,7 +22,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
 
-    <!-- URL schemes consolidados -->
+    <!-- URL schemes -->
     <key>CFBundleURLTypes</key>
     <array>
       <!-- Firebase/Auth -->
@@ -71,12 +72,14 @@
 
     <key>FlutterDeepLinkingEnabled</key>
     <true/>
+
     <key>CFBundleVersion</key>
     <string>$(FLUTTER_BUILD_NUMBER)</string>
+
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
-    <!-- Mensagens de permissão -->
+    <!-- Mensagens de permissão (apenas chaves válidas no iOS) -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We use location to surface tasks based on users' campuses.</string>
     <key>NSCameraUsageDescription</key>
@@ -85,18 +88,22 @@
     <string>We use audio when the user needs to send a voice message.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>We use the user's photo library so that they can send photos of completed tasks or create one.</string>
-    <key>PermissionGroupNotification</key>
-    <string>We use notification for communication from tasker to taskee and vice versa.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>We add photos to your library when you save images from the app.</string>
 
+    <!-- Background/push -->
     <key>UIBackgroundModes</key>
     <array>
       <string>fetch</string>
       <string>remote-notification</string>
     </array>
+
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
-    <key>UIMainStoryboardFile</key>
-    <string>Main</string>
+
+    <!-- Flutter não usa storyboard principal; remover evita warnings -->
+    <!-- <key>UIMainStoryboardFile</key> -->
+
     <key>UISupportedInterfaceOrientations</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
@@ -110,7 +117,16 @@
       <string>UIInterfaceOrientationLandscapeLeft</string>
       <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+
+    <!-- Evita questionário de criptografia em submissão (ajuste se usar criptografia não isenta) -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+
+    <!-- Recomendado em iPadOS para ponteiro/teclados, opcional -->
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
   </dict>
 </plist>
