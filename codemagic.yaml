@@ -161,6 +161,12 @@ workflows:
           pod install --verbose
           cd ..
 
+      - name: Patch SignInWithAppleError.swift (temporário)
+        script: |
+          set -euo pipefail
+          perl -0pi -e "s/(\s*)(case \\.notInteractive:)/\\1\\/\\/\\2/; s/(\s*)(case \\.matchedExcludedCredential:)/\\1\\/\\/\\2/" \
+            ios/Pods/sign_in_with_apple/sign_in_with_apple/Sources/sign_in_with_apple/SignInWithAppleError.swift
+
       - name: Importar certificado no keychain (sem interação)
         script: |
           set -euo pipefail
