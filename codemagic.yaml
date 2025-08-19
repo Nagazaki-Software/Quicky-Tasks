@@ -53,7 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # ✅ Ajuda muito com Xcode 15/16 + plugins
+          # ✅ Ajuda com Xcode 15/16 + plugins
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -77,7 +77,6 @@ workflows:
 
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
             # Braintree (se já vier via plugin, remova)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
@@ -98,11 +97,8 @@ workflows:
                 t.build_configurations.each do |c|
                   bs = c.build_settings
 
-                  # Básico iOS/Swift
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                   bs['SWIFT_VERSION'] = '5.0'
-
-                  # Evita chatices de módulo no Xcode 15/16
                   bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
@@ -110,8 +106,10 @@ workflows:
                   bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
                   bs['ENABLE_BITCODE'] = 'NO'
+                  bs['USE_HEADERMAP'] = 'YES'
+                  bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # 🔎 Caminhos pro Flutter para TODOS os pods (ex.: wakelock_plus)
+                  # 🔎 Garantir caminhos do Flutter p/ TODOS os pods (ex.: wakelock_plus)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -132,7 +130,6 @@ workflows:
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  # Extensão
                   if t.name == 'ImageNotification'
                     bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                   end
@@ -164,7 +161,7 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          # 💊 costuma resolver "Flutter/Flutter.h not found" em CI
+          # 💊 ajuda muito no CI
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
@@ -174,23 +171,85 @@ workflows:
       - name: Patch imports de Flutter nos plugins (Objective-C)
         script: |
           set -euo pipefail
-          # Troca '#import <Flutter/Flutter.h>' (ou com aspas) por '@import Flutter;'
-          # nos plugins Obj-C. Isso reduz dependência de header maps e usa o módulo.
-          count=0
+          # Troca '#import <Flutter/Flutter.h>' ou com aspas -> '@import Flutter;'
           patch_file() {
             local F="$1"
             if grep -qE '#import[[:space:]]*<Flutter/Flutter\.h>|#import[[:space:]]*"Flutter/Flutter\.h"' "$F"; then
               sed -i '' -E 's/#import[[:space:]]*<Flutter\/Flutter\.h>/@import Flutter;/' "$F"
               sed -i '' -E 's/#import[[:space:]]*"Flutter\/Flutter\.h"/@import Flutter;/' "$F"
               echo "Patchei import em: $F"
-              count=$((count+1))
             fi
           }
           # Plugins via symlink
-          while IFS= read -r -d '' F; do patch_file "$F"; done < <(find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null || true)
+          find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
           # Fallback direto no cache do pub (ex.: wakelock_plus)
-          while IFS= read -r -d '' F; do patch_file "$F"; done < <(find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null || true)
-          echo "Arquivos patcheados: $count"
+          find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
+
+      - name: Diagnóstico pré-build com xcodebuild (sem assinatura)
+        script: |
+          set -euo pipefail
+          # Compila sem assinatura só pra extrair o erro de compilação "de verdade"
+          mkdir -p build_logs
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+            -sdk iphoneos -destination generic/platform=iOS \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            -resultBundlePath ../build/xcode_diag.xcresult \
+            clean build | tee ../build_logs/xcode_diag_build.log || true
+          cd ..
+          # Extrai mensagens de erro do .xcresult (reais, do compilador)
+          if [ -d build/xcode_diag.xcresult ]; then
+            xcrun xcresulttool get --format json --path build/xcode_diag.xcresult > build_logs/xcode_diag.json || true
+            python3 - <<'PY' || true
+import json, sys
+from pathlib import Path
+p = Path('build_logs/xcode_diag.json')
+if not p.exists(): sys.exit(0)
+d = json.load(open(p))
+errs=[]
+def walk(x):
+  if isinstance(x, dict):
+    if x.get('issueType')=='error':
+      msg = x.get('message','').strip()
+      sub = x.get('subIssues',{})
+      errs.append(msg)
+    for v in x.values(): walk(v)
+  elif isinstance(x, list):
+    for v in x: walk(v)
+walk(d)
+print("\n===== ERROS DO XCODE (xcresult) =====")
+print(*errs[:20], sep="\n")
+PY
+          fi
+
+      - name: Build IPA assinado (Release)
+        script: |
+          set -euo pipefail
+          mkdir -p build_logs
+          echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
+          source $CM_ENV
+          export NSUnbufferedIO=YES
+          set +e
+          flutter build ipa --release \
+            --build-number="$FLUTTER_BUILD_NUMBER" \
+            --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
+            | tee build_logs/flutter_build_verbose.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit $status
+
+      - name: Diagnóstico pós-build (Swift/Clang)
+        script: |
+          set -euo pipefail
+          if [ -f build_logs/flutter_build_verbose.log ]; then
+            echo "----- PRIMEIRA linha com error/fatal -----"
+            grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
+            echo "----- 200 linhas ao redor -----"
+            awk '
+              /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
+              {a[NR%400]=$0}
+            ' build_logs/flutter_build_verbose.log || true
+          fi
 
       - name: Importar certificado no keychain (sem interação)
         script: |
@@ -247,37 +306,6 @@ workflows:
           done
           echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
 
-      - name: Build IPA assinado (Release)
-        script: |
-          set -euo pipefail
-          mkdir -p build_logs
-          echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
-          source $CM_ENV
-          export NSUnbufferedIO=YES
-          set +e
-          flutter build ipa --release \
-            --build-number="$FLUTTER_BUILD_NUMBER" \
-            --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
-            | tee build_logs/flutter_build_verbose.log
-          status=${PIPESTATUS[0]}
-          set -e
-          exit $status
-
-      - name: Diagnóstico pós-build (Swift/Clang)
-        script: |
-          set -euo pipefail
-          if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- PRIMEIRO erro encontrado -----"
-            perl -0777 -ne 'if(/(^.*(?:error:|fatal error:).*$)/m){print $1; exit 0}' build_logs/flutter_build_verbose.log || true
-            echo "----- 200 linhas ao redor de erros -----"
-            awk '
-              /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%200];} print "----------------"; c=0}
-              {a[NR%200]=$0}
-            ' build_logs/flutter_build_verbose.log | sed -n '1,1000p' || true
-            echo "----- Indicadores comuns -----"
-            grep -nE "Flutter\.h|messages\.g\.(h|m|mm)|non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface|explicit module" build_logs/flutter_build_verbose.log || true
-          fi
-
       - name: Upload para App Store Connect (TestFlight)
         script: |
           set -euo pipefail
@@ -300,4 +328,6 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
-      - build_logs/flutter_build_verbose.log
+      - build_logs/*.log
+      - build/xcode_diag.xcresult
+      - build_logs/xcode_diag.json
