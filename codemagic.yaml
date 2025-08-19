@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (modular headers, Swift 5.0, sem explicit modules)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5, sem modular headers)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,8 +53,8 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # 🔧 Gera module maps p/ pods que não definem módulos
-          use_modular_headers!
+          # 🔧 Usar frameworks (estáticos) — ajuda com Xcode 15/16 e headers do Flutter
+          use_frameworks! :linkage => :static
 
           install! 'cocoapods',
             :warn_for_unused_master_specs_repo => false,
@@ -78,7 +78,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (se já vier via plugin, pode remover)
+            # Braintree (se já vier via plugin, remova estas linhas)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -106,21 +106,27 @@ workflows:
                   # 🚫 Desliga Explicit Module Builds (Xcode 15/16)
                   bs['EXPLICIT_MODULES'] = 'NO'
 
-                  # ✅ Permite includes não-modulares e não quebra o build por warning
+                  # ✅ Permite includes não-modulares e evita quebrar por warning
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
                   bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
 
-                  # 🔎 Garante headers do Flutter visíveis para Pigeon (.g.m/.g.mm)
-                  bs['HEADER_SEARCH_PATHS'] = [
-                    '$(inherited)',
-                    '$(PODS_ROOT)/Headers/Public',
-                    '$(PODS_ROOT)/Headers/Public/**',
-                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
-                  ].uniq
+                  # 🔎 Garante headers/framworks do Flutter visíveis p/ TODOS os pods (ex.: wakelock_plus)
+                  bs['HEADER_SEARCH_PATHS'] = %w[
+                    $(inherited)
+                    $(PODS_ROOT)/Headers/Public
+                    $(PODS_ROOT)/Headers/Public/**
+                    $(PODS_ROOT)/Flutter/Flutter.xcframework/ios-arm64/Headers
+                    $(PODS_ROOT)/Flutter/Flutter.xcframework/ios-arm64_x86_64-simulator/Headers
+                  ].join(' ')
+
+                  bs['FRAMEWORK_SEARCH_PATHS'] = %w[
+                    $(inherited)
+                    $(PODS_ROOT)
+                    $(PODS_ROOT)/Flutter
+                  ].join(' ')
 
                   # Não precisamos de library evolution aqui
                   bs.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
@@ -156,39 +162,15 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          # 🔁 Recria o podspec do Flutter limpinho para evitar "Flutter/Flutter.h not found"
+          # 💊 Resolve vários "Flutter/Flutter.h not found" no CI
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
           pod install --verbose
           cd ..
 
-      - name: Patch SignInWithAppleError.swift (temporário)
-        script: |
-          set -euo pipefail
-          # Procura o arquivo nos symlinks de plugins (padrão do Flutter) e, se faltar, tenta em Pods
-          CANDIDATOS=$(find ios/.symlinks/plugins -type f -name 'SignInWithAppleError.swift' 2>/dev/null || true)
-          if [ -z "$CANDIDATOS" ]; then
-            CANDIDATOS=$(find ios/Pods -type f -name 'SignInWithAppleError.swift' 2>/dev/null || true)
-          fi
-
-          echo "Arquivos a patchar:"
-          printf '%s\n' "$CANDIDATOS"
-
-          if [ -z "$CANDIDATOS" ]; then
-            echo "Nenhum SignInWithAppleError.swift encontrado. Seguindo sem patch."
-            exit 0
-          fi
-
-          # Comenta os cases problemáticos (iOS 15+), evitando erro de compilação em Xcode 15/16
-          for F in $CANDIDATOS; do
-            # BSD sed no macOS usa -i ''
-            sed -i '' \
-              -e 's/^\([[:space:]]*\)case \.notInteractive:/\1\/\/case .notInteractive: \/\/ [patched]/' \
-              -e 's/^\([[:space:]]*\)case \.matchedExcludedCredential:/\1\/\/case .matchedExcludedCredential: \/\/ [patched]/' \
-              "$F" || true
-            echo "Patchei: $F"
-          done
+      # (Removido) Patch de sign_in_with_apple — não é necessário no iOS nesta versão
+      # e o arquivo não existe no caminho do plugin para iOS.
 
       - name: Importar certificado no keychain (sem interação)
         script: |
@@ -265,13 +247,15 @@ workflows:
         script: |
           set -euo pipefail
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- Erros de Swift/Clang (com contexto) -----"
+            echo "----- PRIMEIRO erro encontrado (com contexto) -----"
+            perl -0777 -ne 'if(/^(.*?)(^.*(?:error:|fatal error:).*$)/ms){print $2; exit 0}' build_logs/flutter_build_verbose.log || true
+            echo "----- 200 linhas ao redor de erros -----"
             awk '
-              /Swift(EmitModule|Compile).*error|error:.*Swift|clang: error:| fatal error: / {print ">>>", $0; c=1; next}
-              c>0 {print; if(++c>120) c=0}
-            ' build_logs/flutter_build_verbose.log | sed -n '1,600p' || true
+              /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%200];} print "----------------"; c=0}
+              {a[NR%200]=$0}
+            ' build_logs/flutter_build_verbose.log | sed -n '1,1000p' || true
             echo "----- Indicadores comuns -----"
-            grep -nE "messages\.g\.(m|mm)|Flutter\.h|non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface|explicit module" build_logs/flutter_build_verbose.log || true
+            grep -nE "Flutter\.h|messages\.g\.(h|m|mm)|non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface|explicit module" build_logs/flutter_build_verbose.log || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
