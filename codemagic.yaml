@@ -45,53 +45,39 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Remover plugin tap_google_pay_kit_flutter dos arquivos do Flutter
+      - name: Remover plugin tap_google_pay_kit_flutter (arquivos do Flutter)
         script: |
           set -euo pipefail
-          # Remove da lista de plugins (texto)
+          # 1) .flutter-plugins (texto)
           if [ -f .flutter-plugins ]; then
             grep -v '^tap_google_pay_kit_flutter=' .flutter-plugins > .flutter-plugins.tmp || true
             mv -f .flutter-plugins.tmp .flutter-plugins
-            echo "Removido de .flutter-plugins"
+            echo "tap_google_pay_kit_flutter removido de .flutter-plugins"
           fi
-          # Remove do JSON de dependências
+          # 2) .flutter-plugins-dependencies (JSON) — remover entradas pelo name
           if [ -f .flutter-plugins-dependencies ]; then
-            python3 - <<'PY'
-import json, sys
-p='.flutter-plugins-dependencies'
-data=json.load(open(p))
-# Estruturas mudam entre versões do Flutter; tente remover onde existir
-def drop(lst):
-    return [x for x in lst if not (isinstance(x, dict) and x.get('name')=='tap_google_pay_kit_flutter')]
-if 'plugins' in data:
-    if isinstance(data['plugins'], dict):
-        for k in list(data['plugins'].keys()):
-            v=data['plugins'][k]
-            if isinstance(v, list): data['plugins'][k]=drop(v)
-            elif isinstance(v, dict):
-                for kk in list(v.keys()):
-                    if isinstance(v[kk], list): v[kk]=drop(v[kk])
-# Raiz como lista (fallback raro)
-if isinstance(data, list):
-    data=drop(data)
-json.dump(data, open(p,'w'))
-print("Atualizado", p)
-PY
+            python3 -c "import json,sys; p='.flutter-plugins-dependencies'; d=json.load(open(p)); 
+def drop(lst): 
+    return [x for x in lst if not (isinstance(x,dict) and x.get('name')=='tap_google_pay_kit_flutter')]
+ps=d.get('plugins'); 
+if isinstance(ps, dict):
+    for k,v in list(ps.items()):
+        if isinstance(v,list): ps[k]=drop(v)
+        elif isinstance(v,dict):
+            for kk,vv in list(v.items()):
+                if isinstance(vv,list): v[kk]=drop(vv)
+open(p,'w').write(json.dumps(d))" || true
+            echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
           fi
 
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
           mkdir -p ios/Runner
-          SWIFT_FILE="ios/Runner/SwiftDummy.swift"
-          if [ ! -f "$SWIFT_FILE" ]; then
-            printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
-            echo "Criado $SWIFT_FILE"
-          else
-            echo "Já existe $SWIFT_FILE"
-          fi
+          printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
+          echo "SwiftDummy.swift gravado"
 
-      - name: Podfile (pods estáticos + modular headers Firebase/gRPC + Flutter explícito)
+      - name: Escrever/Atualizar Podfile (pods estáticos + modular headers Firebase/gRPC)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -120,10 +106,7 @@ PY
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Flutter explícito (headers <Flutter/Flutter.h>)
-            pod 'Flutter', :path => 'Flutter'
-
-            # Instala todos os pods de plugins do Flutter
+            # Instala todos os pods dos plugins do Flutter (inclui o pod 'Flutter')
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -133,7 +116,7 @@ PY
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers p/ Firebase + deps (e gRPC/abseil)
+            # Modular headers (Firebase + deps + gRPC/abseil) p/ Swift + estático
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -161,9 +144,9 @@ PY
             pod 'Libuv-gRPC',               :modular_headers => true
           end
 
+          # Extensão de notificação (sem use_frameworks! para casar com o Runner)
           target 'ImageNotification' do
             inherit! :search_paths
-            # sem use_frameworks! (coerente com o Runner)
           end
 
           post_install do |installer|
@@ -175,7 +158,6 @@ PY
                 bs['CLANG_ENABLE_MODULES'] = 'YES'
                 bs['SWIFT_VERSION'] = '5.0'
                 bs['DEFINES_MODULE'] = 'YES'
-                # Evita o erro de include não-modular em gRPC/Firestore
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                 bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                 bs['OTHER_CFLAGS'] = [bs['OTHER_CFLAGS'], '-Wno-non-modular-include-in-framework-module'].compact.join(' ')
@@ -255,14 +237,13 @@ PY
           /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
-
           get_profile_name () {
             ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
               | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
               | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
               | grep -m1 "$1" -B1 | head -n1 || true
           }
-          PNAME=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$PNAME" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $PNAME" "$DEST"
+          P=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $P" "$DEST"
           for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
             [ -n "$BID" ] || continue
             P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
@@ -297,11 +278,9 @@ PY
           set -euo pipefail
           IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
           test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
-
           : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER (Key ID)}"
           : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID (Issuer ID)}"
           : "${APP_STORE_CONNECT_PRIVATE_KEY:?Falta APP_STORE_CONNECT_PRIVATE_KEY (.p8 ou base64)}"
-
           mkdir -p ~/.private_keys
           KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
