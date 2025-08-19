@@ -59,7 +59,7 @@ workflows:
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (pods estáticos + modular_headers + fix tap_google_pay)
+      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + modular_headers + fixes)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -92,8 +92,10 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # App principal — pods estáticos (NÃO usar use_frameworks!)
+          # App principal — frameworks DINÂMICOS (plugins Swift conseguem importar Flutter)
           target 'Runner' do
+            use_frameworks! :linkage => :dynamic
+
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -103,9 +105,8 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # modular_headers somente onde o CocoaPods pede (Firebase & cia)
+            # modular_headers onde necessário (Firebase/Google/nanopb/SDWebImage)
             pod 'SDWebImage',               :modular_headers => true
-
             pod 'FirebaseABTesting',        :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -129,9 +130,10 @@ workflows:
             pod 'FirebaseStorage',           :modular_headers => true
           end
 
-          # Extensão sem pods (independente do Firebase)
+          # Extensão — mantém sem pods, MAS com mesma flag use_frameworks! pra não dar mismatch
           target 'ImageNotification' do
             inherit! :search_paths
+            use_frameworks! :linkage => :dynamic
           end
 
           post_install do |installer|
@@ -151,23 +153,21 @@ workflows:
                 bs['SWIFT_VERSION'] = '5.0'
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-
-                # Expor módulos p/ Swift, mas sem library evolution
                 bs['DEFINES_MODULE'] = 'YES'
+                # evita confusão no sim durante o archive
+                bs['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
 
-                # headers/ldflags necessários (resolve 'Flutter/Flutter.h not found')
+                # headers e ldflags
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
+                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
 
-                # Workaround: plugin que estoura "failed to verify module interface"
+                # plugin que quebrava verificação de interface
                 if t.name == 'tap_google_pay_kit_flutter'
                   bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
                   bs['SWIFT_SERIALIZE_MODULE_INTERFACE'] = 'NO'
-                  bs['SWIFT_VERIFY_EMITTED_MODULE_INTERFACE'] = 'NO'
                   append_unique(bs, 'OTHER_SWIFT_FLAGS', '-no-verify-emitted-module-interface')
-                  bs['DEFINES_MODULE'] = 'YES'
-                  bs['CLANG_ENABLE_MODULES'] = 'YES'
                 end
 
                 if t.name == 'ImageNotification'
@@ -176,7 +176,6 @@ workflows:
               end
             end
 
-            # Ajustes no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -306,8 +305,8 @@ workflows:
       - name: Diagnóstico pós-build (erros claros)
         script: |
           set -euo pipefail
+          echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "==== Principais erros ===="
             grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|failed to verify module interface" build_logs/flutter_build_verbose.log | head -n 200 || true
           else
             echo "Log build_logs/flutter_build_verbose.log não encontrado."
@@ -332,12 +331,15 @@ workflows:
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
+          ls -l ~/.private_keys/ || true
+
           xcrun altool --upload-app \
             --type ios \
             -f "$IPA_PATH" \
             --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --verbose
+
           echo "Upload disparado: $IPA_PATH"
 
     artifacts:
