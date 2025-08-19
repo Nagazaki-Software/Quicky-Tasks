@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (frameworks estáticos, modular headers, Swift 5)
+      - name: Escrever/Atualizar Podfile (modular headers + frameworks estáticos)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,10 +53,9 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Necessário para Swift pods com deps sem módulo (Firebase, SDWebImage, GoogleUtilities, etc.)
+          # Necessário p/ Swift pods com deps que não definem módulos (Firebase, GoogleUtilities, SDWebImage, etc)
           use_modular_headers!
-
-          # Frameworks estáticos para compatibilidade com Flutter/Xcode 15/16
+          # Frameworks estáticos ajudam com Flutter/Xcode 15/16
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -81,7 +80,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (se já vier via plugin, remova estes)
+            # Braintree (remova se vier via plugin)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -118,7 +117,6 @@ workflows:
                     '$(PODS_ROOT)/Headers/Public',
                     '$(PODS_ROOT)/Headers/Public/**',
                     '$(SRCROOT)/Flutter',
-                    '$(SRCROOT)/Flutter/Flutter.framework/Headers',
                     '$(PROJECT_DIR)/Flutter',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
                     '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
@@ -141,21 +139,12 @@ workflows:
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  # Onde o Swift deve procurar headers (inclui fallback local)
-                  bs['SWIFT_INCLUDE_PATHS'] = [
-                    '$(inherited)',
-                    '$(SRCROOT)/Flutter/Flutter.framework/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Headers'
-                  ].join(' ')
-
-                  # Sinaliza modulemap do Flutter (fallback local + engine)
-                  existing_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                  # (Opcional) apontar modulemap do Flutter para o Swift
+                  existing = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
                   bs['OTHER_SWIFT_FLAGS'] = [
-                    existing_flags,
-                    '-Xcc', '-fmodule-map-file=$(SRCROOT)/Flutter/Flutter.framework/Modules/module.modulemap',
-                    '-Xcc', '-fmodule-map-file=${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap',
-                    '-Xcc', '-fmodule-map-file=${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap'
+                    existing,
+                    '-Xcc',
+                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
                   ].join(' ')
 
                   if t.name == 'ImageNotification'
@@ -185,30 +174,6 @@ workflows:
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; head -n 3 "$f" || true; done
 
-      - name: Garantir modulemap/headers do Flutter (fallback local)
-        script: |
-          set -euo pipefail
-          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
-          test -f "$FLUTTER_XCC" || { echo "Generated.xcconfig ausente"; exit 1; }
-          FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r')
-          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
-
-          # Candidatos de engine (release / generic)
-          CAND1="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework"
-          CAND2="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework"
-
-          SRC=""
-          for C in "$CAND1" "$CAND2"; do
-            if [ -f "$C/Modules/module.modulemap" ] && [ -d "$C/Headers" ]; then SRC="$C"; break; fi
-          done
-          [ -n "$SRC" ] || { echo "module.modulemap do Flutter não encontrado no engine"; exit 1; }
-
-          DEST="ios/Flutter/Flutter.framework"
-          mkdir -p "$DEST/Headers" "$DEST/Modules"
-          rsync -a "$SRC/Headers/" "$DEST/Headers/"
-          cp "$SRC/Modules/module.modulemap" "$DEST/Modules/module.modulemap"
-          echo "Copiado modulemap e headers para $DEST"
-
       - name: CocoaPods install (limpo)
         script: |
           set -euo pipefail
@@ -219,47 +184,57 @@ workflows:
           pod install --repo-update --verbose
           cd ..
 
-      - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
+      - name: Garantir modulemap do Flutter (se faltando)
         script: |
           set -euo pipefail
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          if [ ! -f "$FLUTTER_XCC" ]; then
+            echo "Generated.xcconfig não existe"; exit 1
+          fi
+          FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r')
+          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+
+          # Candidatos ao modulemap oficial do engine
+          CAND1="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap"
+          CAND2="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap"
+          SRC_MM=""
+          for p in "$CAND1" "$CAND2"; do
+            [ -f "$p" ] && SRC_MM="$p" && break
+          done
+          [ -n "$SRC_MM" ] || { echo "module.modulemap do engine não encontrado"; exit 1; }
+
+          # Estrutura em Pods/Flutter/Flutter.framework
+          DEST_FW="ios/Pods/Flutter/Flutter.framework"
+          mkdir -p "$DEST_FW/Modules"
+          # Copia modulemap
+          cp -f "$SRC_MM" "$DEST_FW/Modules/module.modulemap"
+          echo "Copiado module.modulemap para $DEST_FW/Modules"
+
+          # Garantir Headers acessíveis (symlink pros headers do xcframework)
+          SRC_HEADERS_DIR="$(dirname "$(dirname "$SRC_MM")")/Headers"
+          if [ -d "$SRC_HEADERS_DIR" ]; then
+            mkdir -p "$DEST_FW"
+            rm -f "$DEST_FW/Headers"
+            ln -s "$SRC_HEADERS_DIR" "$DEST_FW/Headers"
+            echo "Headers linkados: $DEST_FW/Headers -> $SRC_HEADERS_DIR"
+          fi
+
+      - name: (Opcional) Patch imports de Flutter em fontes Obj-C (.m/.mm) — seguro
+        script: |
+          set -euo pipefail
+          # Mantemos headers (.h) intocados. Só .m/.mm (implementação) para evitar problemas em compilações C.
           PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
-
-          replace_file () {
-            perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"
-          }
-
+          replace_file () { perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"; }
           patch_dir () {
-            DIR="$1"
-            [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
-            echo "Varrendo: $DIR"
-            find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
-            | while IFS= read -r -d '' F; do
-                if grep -qE "$PATTERN" "$F"; then
-                  replace_file "$F"
-                  echo "Patchei: $F"
-                fi
-              done
+            DIR="$1"; [ -d "$DIR" ] || { echo "Skip: $DIR"; return 0; }
+            find "$DIR" -type f \( -name '*.m' -o -name '*.mm' \) -print0 \
+              | while IFS= read -r -d '' F; do
+                  if grep -qE "$PATTERN" "$F"; then replace_file "$F"; echo "Patchei: $F"; fi
+                done
           }
-
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
-          patch_dir "$HOME/.pub-cache/git"
-
-          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
-          if [ -f "$FLUTTER_XCC" ]; then
-            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
-            if [ -n "${FLUTTER_ROOT:-}" ] && [ -d "$FLUTTER_ROOT" ]; then
-              IT_HDR="$FLUTTER_ROOT/packages/integration_test/ios/integration_test/Sources/integration_test/include/IntegrationTestPlugin.h"
-              if [ -f "$IT_HDR" ] && grep -qE "$PATTERN" "$IT_HDR"; then
-                replace_file "$IT_HDR"
-                echo "Patchei: $IT_HDR"
-              fi
-            else
-              echo "FLUTTER_ROOT não encontrado ou inacessível; pulando patch no SDK."
-            fi
-          else
-            echo "ios/Flutter/Generated.xcconfig não encontrado; pulando patch no SDK."
-          fi
+          patch_dir "$HOME/.pub-cache/git" || true
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
