@@ -77,6 +77,7 @@ workflows:
 
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
             # Braintree (se já vier via plugin, remova)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
@@ -109,7 +110,7 @@ workflows:
                   bs['USE_HEADERMAP'] = 'YES'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # 🔎 Garantir caminhos do Flutter p/ TODOS os pods (ex.: wakelock_plus)
+                  # 🔎 Caminhos do Flutter p/ TODOS os pods (ex.: wakelock_plus)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -182,45 +183,32 @@ workflows:
           }
           # Plugins via symlink
           find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
-          # Fallback direto no cache do pub (ex.: wakelock_plus)
+          # Fallback no cache do pub (ex.: wakelock_plus)
           find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
 
-      - name: Diagnóstico pré-build com xcodebuild (sem assinatura)
+      - name: Gerar ExportOptions.plist (App Store)
         script: |
           set -euo pipefail
-          # Compila sem assinatura só pra extrair o erro de compilação "de verdade"
-          mkdir -p build_logs
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
-            -sdk iphoneos -destination generic/platform=iOS \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            -resultBundlePath ../build/xcode_diag.xcresult \
-            clean build | tee ../build_logs/xcode_diag_build.log || true
-          cd ..
-          # Extrai mensagens de erro do .xcresult (reais, do compilador)
-          if [ -d build/xcode_diag.xcresult ]; then
-            xcrun xcresulttool get --format json --path build/xcode_diag.xcresult > build_logs/xcode_diag.json || true
-            python3 - <<'PY' || true
-import json, sys
-from pathlib import Path
-p = Path('build_logs/xcode_diag.json')
-if not p.exists(): sys.exit(0)
-d = json.load(open(p))
-errs=[]
-def walk(x):
-  if isinstance(x, dict):
-    if x.get('issueType')=='error':
-      msg = x.get('message','').strip()
-      sub = x.get('subIssues',{})
-      errs.append(msg)
-    for v in x.values(): walk(v)
-  elif isinstance(x, list):
-    for v in x: walk(v)
-walk(d)
-print("\n===== ERROS DO XCODE (xcresult) =====")
-print(*errs[:20], sep="\n")
-PY
-          fi
+          DEST="$CM_BUILD_DIR/export_options.plist"
+          /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
+          get_profile_name () {
+            ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
+              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
+              | grep -m1 "$1" -B1 | head -n1 || true
+          }
+          P=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $P" "$DEST"
+          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
+            [ -n "$BID" ] || continue
+            P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
+          done
+          echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
 
       - name: Build IPA assinado (Release)
         script: |
@@ -241,15 +229,13 @@ PY
       - name: Diagnóstico pós-build (Swift/Clang)
         script: |
           set -euo pipefail
-          if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- PRIMEIRA linha com error/fatal -----"
-            grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
-            echo "----- 200 linhas ao redor -----"
-            awk '
-              /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
-              {a[NR%400]=$0}
-            ' build_logs/flutter_build_verbose.log || true
-          fi
+          echo "----- PRIMEIRA linha com error/fatal -----"
+          grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
+          echo "----- 200 linhas ao redor -----"
+          awk '
+            /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
+            {a[NR%400]=$0}
+          ' build_logs/flutter_build_verbose.log || true
 
       - name: Importar certificado no keychain (sem interação)
         script: |
@@ -282,30 +268,6 @@ PY
           set -euo pipefail
           xcode-project use-profiles
 
-      - name: Gerar ExportOptions.plist (App Store)
-        script: |
-          set -euo pipefail
-          DEST="$CM_BUILD_DIR/export_options.plist"
-          /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
-          get_profile_name () {
-            ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
-              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
-              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
-              | grep -m1 "$1" -B1 | head -n1 || true
-          }
-          P=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $P" "$DEST"
-          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
-            [ -n "$BID" ] || continue
-            P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
-          done
-          echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
-
       - name: Upload para App Store Connect (TestFlight)
         script: |
           set -euo pipefail
@@ -329,5 +291,3 @@ PY
       - build/ios/ipa/*.ipa
       - build/ios/**/*.xcarchive
       - build_logs/*.log
-      - build/xcode_diag.xcresult
-      - build_logs/xcode_diag.json
