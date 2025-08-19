@@ -187,54 +187,99 @@ workflows:
       - name: Garantir modulemap do Flutter (se faltando)
         script: |
           set -euo pipefail
+
           FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
-          if [ ! -f "$FLUTTER_XCC" ]; then
-            echo "Generated.xcconfig não existe"; exit 1
-          fi
-          FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r')
-          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+          test -f "$FLUTTER_XCC" || { echo "ios/Flutter/Generated.xcconfig não encontrado"; exit 1; }
+          FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
+          echo "FLUTTER_ROOT: ${FLUTTER_ROOT:-<vazio>}"
 
-          # Candidatos ao modulemap oficial do engine
-          CAND1="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap"
-          CAND2="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap"
-          SRC_MM=""
-          for p in "$CAND1" "$CAND2"; do
-            [ -f "$p" ] && SRC_MM="$p" && break
-          done
-          [ -n "$SRC_MM" ] || { echo "module.modulemap do engine não encontrado"; exit 1; }
+          PODS_FLUTTER_DIR="ios/Pods/Flutter/Flutter.framework"
+          MODMAP="$PODS_FLUTTER_DIR/Modules/module.modulemap"
+          HDR="$PODS_FLUTTER_DIR/Headers/Flutter.h"
 
-          # Estrutura em Pods/Flutter/Flutter.framework
-          DEST_FW="ios/Pods/Flutter/Flutter.framework"
-          mkdir -p "$DEST_FW/Modules"
-          # Copia modulemap
-          cp -f "$SRC_MM" "$DEST_FW/Modules/module.modulemap"
-          echo "Copiado module.modulemap para $DEST_FW/Modules"
+          # Cria estrutura do framework (caso a pasta ainda não exista)
+          mkdir -p "$PODS_FLUTTER_DIR/Modules" "$PODS_FLUTTER_DIR/Headers"
 
-          # Garantir Headers acessíveis (symlink pros headers do xcframework)
-          SRC_HEADERS_DIR="$(dirname "$(dirname "$SRC_MM")")/Headers"
-          if [ -d "$SRC_HEADERS_DIR" ]; then
-            mkdir -p "$DEST_FW"
-            rm -f "$DEST_FW/Headers"
-            ln -s "$SRC_HEADERS_DIR" "$DEST_FW/Headers"
-            echo "Headers linkados: $DEST_FW/Headers -> $SRC_HEADERS_DIR"
+          # Garante o Headers/Flutter.h copiando do xcframework do engine, se preciso
+          if [ ! -f "$HDR" ]; then
+            CAND1="${FLUTTER_ROOT:-}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers/Flutter.h"
+            CAND2="${FLUTTER_ROOT:-}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers/Flutter.h"
+            for h in "$CAND1" "$CAND2"; do
+              if [ -f "$h" ]; then
+                cp "$h" "$HDR"
+                echo "Copiei Flutter.h de $h"
+                break
+              fi
+            done
           fi
 
-      - name: (Opcional) Patch imports de Flutter em fontes Obj-C (.m/.mm) — seguro
+          # Escreve um module.modulemap mínimo se estiver faltando
+          if [ ! -f "$MODMAP" ]; then
+            cat > "$MODMAP" <<'MMAP'
+          framework module Flutter {
+            umbrella header "Flutter.h"
+            export *
+            module * { export * }
+          }
+          MMAP
+                      echo "Criado module.modulemap em $MODMAP"
+                    else
+                      echo "module.modulemap já existe em $MODMAP"
+                    fi
+
+                    # Cópia opcional para o BuildProductsPath (algumas toolchains olham lá)
+                    DD=$(ls -1d ~/Library/Developer/Xcode/DerivedData/*/Build/Intermediates.noindex/ArchiveIntermediates/Runner/BuildProductsPath/Release-iphoneos 2>/dev/null | head -n1 || true)
+                    if [ -n "${DD:-}" ]; then
+                      DEST="$DD/Flutter/Flutter.framework/Modules"
+                      mkdir -p "$DEST"
+                      cp -f "$MODMAP" "$DEST/module.modulemap" || true
+                      echo "Copiado modulemap para $DEST"
+                    fi
+
+      - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
-          # Mantemos headers (.h) intocados. Só .m/.mm (implementação) para evitar problemas em compilações C.
+          MODMAP="ios/Pods/Flutter/Flutter.framework/Modules/module.modulemap"
+          if [ ! -f "$MODMAP" ]; then
+            echo "Sem module.modulemap do Flutter; não vou converter #import -> @import para evitar que fique 'Flutter;' inválido."
+            exit 0
+          fi
+
           PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
-          replace_file () { perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"; }
-          patch_dir () {
-            DIR="$1"; [ -d "$DIR" ] || { echo "Skip: $DIR"; return 0; }
-            find "$DIR" -type f \( -name '*.m' -o -name '*.mm' \) -print0 \
-              | while IFS= read -r -d '' F; do
-                  if grep -qE "$PATTERN" "$F"; then replace_file "$F"; echo "Patchei: $F"; fi
-                done
+          replace_file () {
+            # Troca segura para @import Flutter;
+            perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"
           }
+
+          patch_dir () {
+            DIR="$1"
+            [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
+            echo "Varrendo: $DIR"
+            find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
+            | while IFS= read -r -d '' F; do
+                if grep -qE "$PATTERN" "$F"; then
+                  replace_file "$F"
+                  echo "Patchei: $F"
+                fi
+              done
+          }
+
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
-          patch_dir "$HOME/.pub-cache/git" || true
+          patch_dir "$HOME/.pub-cache/git"
+
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          if [ -f "$FLUTTER_XCC" ]; then
+            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
+            if [ -n "${FLUTTER_ROOT:-}" ] && [ -d "$FLUTTER_ROOT" ]; then
+              IT_HDR="$FLUTTER_ROOT/packages/integration_test/ios/integration_test/Sources/integration_test/include/IntegrationTestPlugin.h"
+              if [ -f "$IT_HDR" ] && grep -qE "$PATTERN" "$IT_HDR"; then
+                replace_file "$IT_HDR"
+                echo "Patchei: $IT_HDR"
+              fi
+            fi
+          fi
+
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
