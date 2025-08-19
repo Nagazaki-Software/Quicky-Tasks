@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (padrão Flutter + modular headers + Braintree)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos, modular headers, Swift 5)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,13 +53,16 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # >>> Habilita module maps para dependências não-modulares (Firebase, SDWebImage via DKPhotoGallery, etc.)
+          # Necessário para Swift pods com deps sem módulo (Firebase, SDWebImage, GoogleUtilities, etc.)
           use_modular_headers!
+
+          # Frameworks estáticos para compatibilidade com Flutter/Xcode 15/16
+          use_frameworks! :linkage => :static
 
           install! 'cocoapods',
             :warn_for_unused_master_specs_repo => false,
-            :generate_multiple_pod_projects => false,
-            :integrate_targets => true
+            :generate_multiple_pod_projects   => false,
+            :integrate_targets                => true
 
           project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
 
@@ -78,7 +81,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (se já vier via plugin, remova)
+            # Braintree (se já vier via plugin, remova estes)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -90,6 +93,7 @@ workflows:
             inherit! :search_paths
           end
 
+          # Deixa todos os pods "modulares" e com caminhos de header/framework do Flutter acessíveis
           post_install do |installer|
             projects = [installer.pods_project]
             installer.aggregate_targets.each { |agg| projects << agg.user_project }
@@ -99,27 +103,50 @@ workflows:
                   bs = c.build_settings
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                   bs['SWIFT_VERSION'] = '5.0'
+                  bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
-                  bs['ENABLE_BITCODE'] = 'NO'
+                  bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                  bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+                  bs['ENABLE_BITCODE'] = 'NO'
                   bs['USE_HEADERMAP'] = 'YES'
+                  bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # Ajuda o Swift/ObjC a enxergar o Flutter.framework
+                  # Headers do Flutter (várias localizações possíveis)
+                  bs['HEADER_SEARCH_PATHS'] = [
+                    '$(inherited)',
+                    '$(PODS_ROOT)/Headers/Public',
+                    '$(PODS_ROOT)/Headers/Public/**',
+                    '$(SRCROOT)/Flutter',
+                    '$(PROJECT_DIR)/Flutter',
+                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/../Flutter/Flutter.framework/Headers',
+                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter/Flutter.framework/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
+                  ].join(' ')
+
+                  # Locais para o Flutter.framework
                   bs['FRAMEWORK_SEARCH_PATHS'] = [
                     '$(inherited)',
+                    '$(PODS_ROOT)',
+                    '$(PODS_ROOT)/Flutter',
+                    '$(SRCROOT)/Flutter',
+                    '$(PODS_ROOT)/../Flutter',
+                    '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  bs['HEADER_SEARCH_PATHS'] = [
-                    '$(inherited)',
-                    '$(PODS_ROOT)/Headers/Public',
-                    '$(SRCROOT)/Flutter',
-                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
+                  # Sinaliza onde está o modulemap do Flutter para o compilador Swift
+                  existing_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                  bs['OTHER_SWIFT_FLAGS'] = [
+                    existing_flags,
+                    '-Xcc',
+                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
                   ].join(' ')
 
                   if t.name == 'ImageNotification'
@@ -156,18 +183,15 @@ workflows:
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
-          pod install --verbose
+          pod install --repo-update --verbose
           cd ..
 
       - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
-
-          # Padrão que identifica '#import <Flutter/Flutter.h>' ou "#import "Flutter/Flutter.h""
           PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
 
           replace_file () {
-            # Usa perl para substituir de forma robusta (compatível com macOS)
             perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"
           }
 
@@ -175,7 +199,6 @@ workflows:
             DIR="$1"
             [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
             echo "Varrendo: $DIR"
-            # Varre .h/.m/.mm/.pch com NUL-separado (resistente a espaços/acentos)
             find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
             | while IFS= read -r -d '' F; do
                 if grep -qE "$PATTERN" "$F"; then
@@ -185,12 +208,10 @@ workflows:
               done
           }
 
-          # Plugins via symlink do iOS e cache do pub
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
           patch_dir "$HOME/.pub-cache/git"
 
-          # (Opcional) também patchar o SDK do Flutter onde alguns headers vivem
           FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
           if [ -f "$FLUTTER_XCC" ]; then
             FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
@@ -206,45 +227,6 @@ workflows:
           else
             echo "ios/Flutter/Generated.xcconfig não encontrado; pulando patch no SDK."
           fi
-
-
-      - name: Garantir modulemap do Flutter (se faltando)
-        script: |
-          set -euo pipefail
-          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
-          FLUTTER_ROOT=""
-          if [ -f "$FLUTTER_XCC" ]; then
-            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
-          fi
-          echo "FLUTTER_ROOT: ${FLUTTER_ROOT:-<desconhecido>}"
-
-          CANDIDATES=""
-          if [ -n "${FLUTTER_ROOT:-}" ]; then
-            CANDIDATES="$CANDIDATES $FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework"
-            CANDIDATES="$CANDIDATES $FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework"
-          fi
-          CANDIDATES="$CANDIDATES ios/Flutter/Flutter.framework ios/.symlinks/flutter/ios/Flutter/Flutter.framework ios/Pods/Flutter/Flutter.framework"
-
-          CREATED=0
-          for FWF in $CANDIDATES; do
-            [ -d "$FWF" ] || continue
-            MOD="$FWF/Modules/module.modulemap"
-            HDR="$FWF/Headers/Flutter.h"
-            if [ -f "$MOD" ]; then
-              echo "OK: modulemap existe em $MOD"
-              continue
-            fi
-            echo "Criando modulemap em $MOD"
-            mkdir -p "$(dirname "$MOD")"
-            printf 'module Flutter {\n  umbrella header "Flutter.h"\n  export *\n  module * { export * }\n}\n' > "$MOD"
-            if [ -f "$HDR" ]; then
-              echo "Modulemap criado para $FWF"
-              CREATED=$((CREATED+1))
-            else
-              echo "Aviso: $HDR não encontrado (modulemap criado assim mesmo)."
-            fi
-          done
-          echo "Modulemaps criados: $CREATED"
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
@@ -319,20 +301,35 @@ workflows:
           echo "Build terminou com status: $status"
           exit 0
 
-      - name: Diagnóstico pós-build (Swift/Clang TURBO)
+      - name: Diagnóstico pós-build (Swift/Clang TURBO++)
         script: |
           set -euo pipefail
           source $CM_ENV || true
-          echo "----- PRIMEIRA linha com error/fatal (arquivo do Flutter) -----"
-          grep -nE "error:|fatal error:" build_logs/flutter_build_verbose.log | head -n 1 || true
-          echo "----- 200 linhas de contexto do Flutter log -----"
-          if LINE=$(grep -nE "error:|fatal error:" build_logs/flutter_build_verbose.log | head -n 1 | cut -d: -f1); then
-            start=$((LINE-100)); [ "$start" -lt 1 ] && start=1; end=$((LINE+100))
-            sed -n "${start},${end}p" build_logs/flutter_build_verbose.log || true
+          LOG=build_logs/flutter_build_verbose.log
+          echo "----- PRIMEIRA linha com error/fatal/undefined/module/failed -----"
+          grep -m1 -niE "error:|fatal error:|Undefined symbols|ld: |No such module|module map file .* not found|Command .* failed|swift-frontend|CompileSwift failed|CompileC failed" "$LOG" || true
+
+          echo "----- CONTEXTO (±120 linhas) -----"
+          line=$(grep -m1 -nE "error:|fatal error:|Undefined symbols|ld: |No such module|module map file .* not found|Command .* failed|swift-frontend|CompileSwift failed|CompileC failed" "$LOG" | cut -d: -f1 || echo 0)
+          if [ "$line" -gt 0 ]; then
+            start=$((line-120)); [ "$start" -lt 1 ] && start=1
+            end=$((line+120))
+            sed -n "${start},${end}p" "$LOG" || true
+          else
+            echo "Nenhuma linha 'error' encontrada no log principal."
           fi
+
           echo "----- Varrendo DerivedData por erros (até 10 primeiros) -----"
-          find ~/Library/Developer/Xcode/DerivedData -type f -name '*.log' -maxdepth 3 -print0 2>/dev/null \
-            | xargs -0 grep -nE "error:|fatal error:" 2>/dev/null | head -n 10 || true
+          DD=$(ls -1d ~/Library/Developer/Xcode/DerivedData/*/ 2>/dev/null | head -n1 || true)
+          if [ -n "${DD:-}" ]; then
+            grep -R --include=\*.log -nE "error:|fatal error:|Undefined symbols|ld: |No such module|module map file .* not found|Command .* failed|swift-frontend|CompileSwift failed|CompileC failed" "$DD" 2>/dev/null | head -n 10 || true
+          else
+            echo "DerivedData não encontrado."
+          fi
+
+          echo "----- ÚLTIMAS 400 LINHAS DO LOG -----"
+          tail -n 400 "$LOG" || true
+
           echo "Status capturado: ${BUILD_STATUS:-0}"
 
       - name: Upload para App Store Connect (TestFlight)
@@ -343,7 +340,7 @@ workflows:
             echo "Build falhou, pulando upload."
             exit 0
           fi
-          IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n 1)
+          IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
           test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
           : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER (Key ID)}"
           : "${APP_STORE_CONNECT_ISSUER_ID:?Falta APP_STORE_CONNECT_ISSUER_ID (Issuer ID)}"
