@@ -44,7 +44,166 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5)
+      - name: Escrever/Atualizar Info.plist (Runner)
+        script: |
+          set -euo pipefail
+          mkdir -p ios/Runner
+          cat > ios/Runner/Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+            <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>$(DEVELOPMENT_LANGUAGE)</string>
+
+              <key>CFBundleDisplayName</key>
+              <string>Quicky</string>
+              <key>CFBundleExecutable</key>
+              <string>$(EXECUTABLE_NAME)</string>
+              <key>CFBundleIdentifier</key>
+              <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>Quicky</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>$(FLUTTER_BUILD_NAME)</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+
+              <!-- URL schemes -->
+              <key>CFBundleURLTypes</key>
+              <array>
+                <!-- Firebase/Auth -->
+                <dict>
+                  <key>CFBundleTypeRole</key>
+                  <string>Editor</string>
+                  <key>CFBundleURLSchemes</key>
+                  <array>
+                    <string>com.googleusercontent.apps.1075126726259-jp9qtdmdp1oc3hjluiu7ek1lgq92nvj4</string>
+                  </array>
+                </dict>
+                <!-- Deep link quicky:// -->
+                <dict>
+                  <key>CFBundleTypeRole</key>
+                  <string>Editor</string>
+                  <key>CFBundleURLName</key>
+                  <string>quicky.com</string>
+                  <key>CFBundleURLSchemes</key>
+                  <array>
+                    <string>quicky</string>
+                  </array>
+                </dict>
+                <!-- Braintree retorno app-switch -->
+                <dict>
+                  <key>CFBundleTypeRole</key>
+                  <string>Editor</string>
+                  <key>CFBundleURLName</key>
+                  <string>com.nagazakisoftware.quick.payments</string>
+                  <key>CFBundleURLSchemes</key>
+                  <array>
+                    <string>com.nagazakisoftware.quick.payments</string>
+                  </array>
+                </dict>
+              </array>
+
+              <!-- Permite app-switch Venmo/PayPal -->
+              <key>LSApplicationQueriesSchemes</key>
+              <array>
+                <string>venmo</string>
+                <string>com.venmo.touch.v2</string>
+                <string>paypal</string>
+                <string>com.paypal.ppclient.touch.v2</string>
+                <string>com.paypal.ppclient.touch.v1</string>
+                <string>com.paypal.ppclient.touch</string>
+                <string>com.paypal.paypalaccounts</string>
+              </array>
+
+              <key>FlutterDeepLinkingEnabled</key>
+              <true/>
+
+              <key>CFBundleVersion</key>
+              <string>$(FLUTTER_BUILD_NUMBER)</string>
+
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+
+              <!-- Permissões -->
+              <key>NSLocationWhenInUseUsageDescription</key>
+              <string>We use location to surface tasks based on users' campuses.</string>
+              <key>NSCameraUsageDescription</key>
+              <string>We use the user's camera so that they can send photos of completed tasks or create one.</string>
+              <key>NSMicrophoneUsageDescription</key>
+              <string>We use audio when the user needs to send a voice message.</string>
+              <key>NSPhotoLibraryUsageDescription</key>
+              <string>We use the user's photo library so that they can send photos of completed tasks or create one.</string>
+              <key>NSPhotoLibraryAddUsageDescription</key>
+              <string>We add photos to your library when you save images from the app.</string>
+
+              <!-- Background/push -->
+              <key>UIBackgroundModes</key>
+              <array>
+                <string>fetch</string>
+                <string>remote-notification</string>
+              </array>
+
+              <key>UILaunchStoryboardName</key>
+              <string>LaunchScreen</string>
+
+              <!-- Orientações -->
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+              </array>
+              <key>UISupportedInterfaceOrientations~ipad</key>
+              <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationPortraitUpsideDown</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+              </array>
+
+              <key>UIViewControllerBasedStatusBarAppearance</key>
+              <false/>
+
+              <!-- Criptografia (ajuste se usar não-isenta) -->
+              <key>ITSAppUsesNonExemptEncryption</key>
+              <false/>
+
+              <key>UIApplicationSupportsIndirectInputEvents</key>
+              <true/>
+            </dict>
+          </plist>
+          PLIST
+
+      - name: (Opcional) Criar/atualizar Runner.entitlements (Sign in with Apple)
+        script: |
+          set -euo pipefail
+          ENT=ios/Runner/Runner.entitlements
+          mkdir -p ios/Runner
+          if [ ! -f "$ENT" ]; then
+            cat > "$ENT" <<'ENTXML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+              <dict>
+                <key>com.apple.developer.applesignin</key>
+                <array>
+                  <string>Default</string>
+                </array>
+              </dict>
+            </plist>
+            ENTXML
+            echo "Runner.entitlements criado com Sign in with Apple (ajuste se não usar)."
+          else
+            echo "Runner.entitlements já existe; não alterado."
+          fi
+
+      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5, caminhos do Flutter)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,7 +212,6 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Frameworks estáticos ajudam nos plugins no Xcode 15/16
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -78,7 +236,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (se já vier via plugin, remova)
+            # Braintree (se já vier via plugin, remova estas linhas)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -90,7 +248,7 @@ workflows:
             inherit! :search_paths
           end
 
-            post_install do |installer|
+          post_install do |installer|
             projects = [installer.pods_project]
             installer.aggregate_targets.each { |agg| projects << agg.user_project }
             projects.uniq.each do |proj|
@@ -100,17 +258,16 @@ workflows:
 
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                   bs['SWIFT_VERSION'] = '5.0'
-                  bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
-                  bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                  bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+                  bs['EXPLICIT_MODULES'] = 'NO'
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
                   bs['ENABLE_BITCODE'] = 'NO'
                   bs['USE_HEADERMAP'] = 'YES'
+                  bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                  bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # Caminhos do Flutter para TODOS os pods (vários locais possíveis)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -132,22 +289,40 @@ workflows:
                     '$(SRCROOT)/Flutter',
                     '$(PODS_ROOT)/../Flutter',
                     '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
+                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release',
-                    # NOVO: garante que o swiftc ache o Flutter.framework dentro de BuildProducts
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
+                  ].join(' ')
+
+                  bs['LIBRARY_SEARCH_PATHS'] = [
+                    '$(inherited)',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter'
                   ].join(' ')
 
-                  # NOVO: aponta o Swift diretamente pro modulemap e headers do Flutter
+                  # Ajuda o Swift a encontrar o modulemap/headers do Flutter
                   bs['SWIFT_INCLUDE_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers'
                   ].join(' ')
 
-                  existing_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                  existing_swift_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
                   bs['OTHER_SWIFT_FLAGS'] = [
-                    existing_flags,
+                    existing_swift_flags,
                     '-Xcc',
+                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
+                  ].join(' ')
+
+                  existing_c_flags = bs['OTHER_CFLAGS'] || '$(inherited)'
+                  bs['OTHER_CFLAGS'] = [
+                    existing_c_flags,
+                    '-fmodules',
+                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
+                  ].join(' ')
+
+                  existing_cc_flags = bs['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+                  bs['OTHER_CPLUSPLUSFLAGS'] = [
+                    existing_cc_flags,
+                    '-fmodules',
                     '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
                   ].join(' ')
 
@@ -158,7 +333,6 @@ workflows:
               end
             end
           end
-
           PODFILE
 
       - name: Patch xcconfigs do Flutter para herdar Pods
@@ -192,13 +366,12 @@ workflows:
       - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
+          # Substitui '#import <Flutter/Flutter.h>' por '@import Flutter;' onde ainda existir
           PATTERN='^#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
-
           patch_dir () {
             DIR="$1"
             [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
             echo "Varrendo: $DIR"
-            # Varre .h/.m/.mm/.pch de forma POSIX (sem mapfile)
             find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
             | while IFS= read -r -d '' F; do
                 if grep -qE "$PATTERN" "$F"; then
@@ -207,13 +380,11 @@ workflows:
                 fi
               done
           }
-
-          # Plugins via symlink do iOS e cache do pub
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
           patch_dir "$HOME/.pub-cache/git"
 
-          # Também patchar o SDK do Flutter (inclui integration_test)
+          # Também patchar possíveis cabeçalhos do SDK do Flutter (ex.: integration_test)
           FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
           if [ -f "$FLUTTER_XCC" ]; then
             FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
@@ -223,13 +394,7 @@ workflows:
                 perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$IT_HDR"
                 echo "Patchei: $IT_HDR"
               fi
-              # (Opcional) varrer outros pacotes iOS do SDK
-              patch_dir "$FLUTTER_ROOT/packages"
-            else
-              echo "FLUTTER_ROOT não encontrado ou inacessível (não foi possível varrer SDK)."
             fi
-          else
-            echo "ios/Flutter/Generated.xcconfig não encontrado; pulando patch no SDK do Flutter."
           fi
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
@@ -338,7 +503,7 @@ workflows:
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
-            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 -D > ~/.private_keys/AuthKey_"${KEY_ID}".p8
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           app-store-connect publish --path "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --issuerId "$APP_STORE_CONNECT_ISSUER_ID" --privateKeyPath ~/.private_keys/AuthKey_"${KEY_ID}".p8 --verbose
