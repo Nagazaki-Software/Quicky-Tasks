@@ -320,41 +320,35 @@ workflows:
           fi
           echo "FLUTTER_ROOT: ${FLUTTER_ROOT:-<desconhecido>}"
 
-          # Locais candidatos do Flutter.framework
-          CANDIDATES=()
-          [ -n "$FLUTTER_ROOT" ] && CANDIDATES+=("$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework")
-          [ -n "$FLUTTER_ROOT" ] && CANDIDATES+=("$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework")
-          CANDIDATES+=("ios/Flutter/Flutter.framework")
-          CANDIDATES+=("ios/.symlinks/flutter/ios/Flutter/Flutter.framework")
-          CANDIDATES+=("ios/Pods/Flutter/Flutter.framework")
+          # Locais candidatos do Flutter.framework (sem usar arrays/heredoc)
+          CANDIDATES=""
+          if [ -n "${FLUTTER_ROOT:-}" ]; then
+            CANDIDATES="$CANDIDATES $FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework"
+            CANDIDATES="$CANDIDATES $FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework"
+          fi
+          CANDIDATES="$CANDIDATES ios/Flutter/Flutter.framework ios/.symlinks/flutter/ios/Flutter/Flutter.framework ios/Pods/Flutter/Flutter.framework"
 
           CREATED=0
-          for FWF in "${CANDIDATES[@]}"; do
-            if [ -d "$FWF" ]; then
-              MOD="$FWF/Modules/module.modulemap"
-              HDR="$FWF/Headers/Flutter.h"
-              if [ -f "$MOD" ]; then
-                echo "OK: modulemap existe em $MOD"
-              else
-                echo "Criando modulemap em $MOD"
-                mkdir -p "$(dirname "$MOD")"
-                cat > "$MOD" <<'MMAP'
-                module Flutter {
-                  umbrella header "Flutter.h"
-                  export *
-                  module * { export * }
-                }
-                MMAP
-                if [ -f "$HDR" ]; then
-                  echo "Modulemap criado para $FWF"
-                  CREATED=$((CREATED+1))
-                else
-                  echo "Aviso: $HDR não encontrado (mas modulemap criado assim mesmo)."
-                fi
-              fi
+          for FWF in $CANDIDATES; do
+            [ -d "$FWF" ] || continue
+            MOD="$FWF/Modules/module.modulemap"
+            HDR="$FWF/Headers/Flutter.h"
+            if [ -f "$MOD" ]; then
+              echo "OK: modulemap existe em $MOD"
+              continue
+            fi
+            echo "Criando modulemap em $MOD"
+            mkdir -p "$(dirname "$MOD")"
+            printf 'module Flutter {\n  umbrella header "Flutter.h"\n  export *\n  module * { export * }\n}\n' > "$MOD"
+            if [ -f "$HDR" ]; then
+              echo "Modulemap criado para $FWF"
+              CREATED=$((CREATED+1))
+            else
+              echo "Aviso: $HDR não encontrado (modulemap criado assim mesmo)."
             fi
           done
           echo "Modulemaps criados: $CREATED"
+
 
       - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
