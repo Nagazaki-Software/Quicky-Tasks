@@ -53,6 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+          # Frameworks estáticos funcionam melhor com plugins no Xcode 15/16
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -76,6 +77,7 @@ workflows:
 
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
             # Braintree (se já vier via plugin, remova)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
@@ -108,7 +110,7 @@ workflows:
                   bs['USE_HEADERMAP'] = 'YES'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # 🔎 Caminhos do Flutter p/ TODOS os pods (inclui possíveis locais)
+                  # Caminhos do Flutter para TODOS os pods (vários locais possíveis)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -172,23 +174,27 @@ workflows:
           pod install --verbose
           cd ..
 
-      - name: Patch imports de Flutter nos plugins (Obj-C e Obj-C++)
+      - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
-          patch_one() {
-            local F="$1"
-            if grep -qE '#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]' "$F"; then
-              # troca include por módulo (funciona melhor com Xcode 15/16)
+          # Padrão do import problemático
+          PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
+          patch_dir () {
+            local DIR="$1"
+            [ -d "$DIR" ] || return 0
+            echo "Varrendo: $DIR"
+            # lista arquivos interessantes
+            mapfile -t FILES < <(grep -RIlE "$PATTERN" "$DIR" --include='*.h' --include='*.m' --include='*.mm' --include='*.pch' 2>/dev/null || true)
+            for F in "${FILES[@]}"; do
               perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$F"
               echo "Patchei import em: $F"
-            fi
+            done
           }
-          # Plugins via symlink
-          find ios/.symlinks/plugins -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' \) -print0 2>/dev/null | \
-            while IFS= read -r -d '' F; do patch_one "$F"; done
-          # Cache do pub (cobre wakelock_plus/messages.g.m)
-          find "$HOME/.pub-cache" -type f -path "*ios*" \( -name '*.h' -o -name '*.m' -o -name '*.mm' \) -print0 2>/dev/null | \
-            while IFS= read -r -d '' F; do patch_one "$F"; done
+          # Plugins via symlink do iOS
+          patch_dir "ios/.symlinks/plugins"
+          # Plugins do cache (hosted + git), incluindo darwin/**
+          patch_dir "$HOME/.pub-cache/hosted/pub.dev"
+          patch_dir "$HOME/.pub-cache/git"
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
