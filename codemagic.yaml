@@ -43,7 +43,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (pods estáticos + modular headers Firebase/gRPC)
+      - name: Escrever/Atualizar Podfile (Firebase estável, sem modular headers globais)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -72,41 +72,15 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
+            # Instala pods dos plugins (inclui 'Flutter')
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree
+            # Braintree (ajuste se já vier por plugin)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
-
-            # Modular headers para evitar conflitos (Firebase/gRPC/etc)
-            pod 'SDWebImage',               :modular_headers => true
-            pod 'FirebaseCore',             :modular_headers => true
-            pod 'FirebaseCoreExtension',    :modular_headers => true
-            pod 'FirebaseCoreInternal',     :modular_headers => true
-            pod 'GoogleUtilities',          :modular_headers => true
-            pod 'GoogleDataTransport',      :modular_headers => true
-            pod 'FirebaseInstallations',    :modular_headers => true
-            pod 'nanopb',                   :modular_headers => true
-            pod 'FirebaseAuthInterop',      :modular_headers => true
-            pod 'FirebaseAppCheckInterop',  :modular_headers => true
-            pod 'FirebaseMessagingInterop', :modular_headers => true
-            pod 'RecaptchaInterop',         :modular_headers => true
-            pod 'FirebaseAuth',             :modular_headers => true
-            pod 'FirebaseFirestore',        :modular_headers => true
-            pod 'FirebaseFirestoreInternal',:modular_headers => true
-            pod 'FirebaseFunctions',        :modular_headers => true
-            pod 'FirebaseRemoteConfig',     :modular_headers => true
-            pod 'FirebaseSessions',         :modular_headers => true
-            pod 'FirebaseStorage',          :modular_headers => true
-            pod 'FirebaseABTesting',        :modular_headers => true
-
-            pod 'gRPC-Core',                :modular_headers => true
-            pod 'gRPC-C++',                 :modular_headers => true
-            pod 'abseil',                   :modular_headers => true
-            pod 'Libuv-gRPC',               :modular_headers => true
           end
 
           target 'ImageNotification' do
@@ -118,13 +92,17 @@ workflows:
               flutter_additional_ios_build_settings(t)
               t.build_configurations.each do |c|
                 bs = c.build_settings
+                # Alinhamento mínimo iOS e Swift
                 bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                bs['CLANG_ENABLE_MODULES'] = 'YES'
                 bs['SWIFT_VERSION'] = '5.0'
-                bs['DEFINES_MODULE'] = 'YES'
+                bs['CLANG_ENABLE_MODULES'] = 'YES'
+                # Evitar problemas de interface Swift entre compilers
+                bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+                bs['OTHER_SWIFT_FLAGS'] = [bs['OTHER_SWIFT_FLAGS'], '-no-verify-emitted-module-interface'].compact.join(' ')
+                # Relaxar warnings de includes não-modulares, sem forçar modular headers
                 bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                 bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-                bs['OTHER_CFLAGS'] = [bs['OTHER_CFLAGS'], '-Wno-non-modular-include-in-framework-module'].compact.join(' ')
+                bs['DEFINES_MODULE'] = 'YES'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
@@ -232,14 +210,17 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (grep curto)
+      - name: Diagnóstico pós-build (contexto do erro Swift)
         script: |
           set -euo pipefail
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- Erros comuns detectados -----"
-            grep -nE "error:|Swift(EmitModule|Compile) Error|no such module|file not found|failed to verify module interface|modulemap|non-modular|Undefined symbols for architecture|ld: symbol\(s\) not found" build_logs/flutter_build_verbose.log | head -n 300 || true
-            echo "----- Caminhos de toolchain -----"
-            grep -nE "Xcode|Developer|Toolchain" build_logs/flutter_build_verbose.log | head -n 50 || true
+            echo "----- Blocos de erro Swift (com contexto) -----"
+            awk '
+              /Swift(EmitModule|Compile).*error|error:.*Swift/ {print ">>>", $0; c=1; next}
+              c>0 {print; if(++c>80) c=0}
+            ' build_logs/flutter_build_verbose.log | sed -n '1,400p' || true
+            echo "----- Indicadores comuns -----"
+            grep -nE "failed to verify module interface|no such module|Undefined symbols for architecture|modulemap" build_logs/flutter_build_verbose.log || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
