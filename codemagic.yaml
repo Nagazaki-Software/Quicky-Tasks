@@ -35,9 +35,7 @@ workflows:
           echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
           echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
           echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-          ruby -v
-          gem env home
-          pod --version
+          ruby -v && gem env home && pod --version
 
       - name: Flutter clean, precache & pub get
         script: |
@@ -53,13 +51,26 @@ workflows:
           mkdir -p ios/Runner
           SWIFT_FILE="ios/Runner/SwiftDummy.swift"
           if [ ! -f "$SWIFT_FILE" ]; then
-            printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
+            cat > "$SWIFT_FILE" <<'SWIFT'
+            import Foundation
+            @objc class SwiftDummy: NSObject {}
+            SWIFT
+            perl -i -pe 's/^\s+$//g' "$SWIFT_FILE"
             echo "Criado $SWIFT_FILE"
           else
             echo "Já existe $SWIFT_FILE"
           fi
 
-      - name: Escrever/Atualizar Podfile (frameworks dinâmicos + modular_headers + fixes)
+      - name: Patch do plugin flutter_compass (header -Swift.h)
+        script: |
+          set -euo pipefail
+          shopt -s nullglob
+          for F in "$HOME/.pub-cache/hosted/pub.dev"/flutter_compass-*/ios/Classes/FlutterCompassPlugin.m; do
+            echo "Patching $F"
+            perl -0777 -pe 's/#import <flutter_compass\/flutter_compass-Swift\.h>/#if __has_include(<flutter_compass\/flutter_compass-Swift.h>)\n#import <flutter_compass\/flutter_compass-Swift.h>\n#else\n#import "flutter_compass-Swift.h"\n#endif/g' -i "$F" || true
+          done
+
+      - name: Escrever/Atualizar Podfile (pods estáticos + módulos seletivos Firebase/gRPC)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -73,18 +84,13 @@ workflows:
             :generate_multiple_pod_projects => false,
             :integrate_targets => true
 
-          project 'Runner', {
-            'Debug' => :debug,
-            'Profile' => :release,
-            'Release' => :release,
-          }
+          project 'Runner', { 'Debug' => :debug, 'Profile' => :release, 'Release' => :release }
 
           def flutter_root
             generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
             raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
             File.foreach(generated_xcconfig) do |line|
-              m = line.match(/FLUTTER_ROOT\=(.*)/)
-              return m[1].strip if m
+              m = line.match(/FLUTTER_ROOT\=(.*)/); return m[1].strip if m
             end
             raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
           end
@@ -92,10 +98,8 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # App principal — frameworks DINÂMICOS (plugins Swift conseguem importar Flutter)
+          # App principal (pods estáticos – sem use_frameworks!)
           target 'Runner' do
-            use_frameworks! :linkage => :dynamic
-
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -105,77 +109,71 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # modular_headers onde necessário (Firebase/Google/nanopb/SDWebImage)
+            # Modular headers p/ Swift pods (Firebase + deps)
             pod 'SDWebImage',               :modular_headers => true
-            pod 'FirebaseABTesting',        :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
             pod 'FirebaseCoreInternal',     :modular_headers => true
-            pod 'FirebaseInstallations',    :modular_headers => true
             pod 'GoogleUtilities',          :modular_headers => true
             pod 'GoogleDataTransport',      :modular_headers => true
+            pod 'FirebaseInstallations',    :modular_headers => true
             pod 'nanopb',                   :modular_headers => true
-
-            pod 'FirebaseAuth',             :modular_headers => true
             pod 'FirebaseAuthInterop',      :modular_headers => true
             pod 'FirebaseAppCheckInterop',  :modular_headers => true
             pod 'FirebaseMessagingInterop', :modular_headers => true
             pod 'RecaptchaInterop',         :modular_headers => true
+            pod 'FirebaseAuth',             :modular_headers => true
+            pod 'FirebaseFirestore',        :modular_headers => true
+            pod 'FirebaseFirestoreInternal',:modular_headers => true
+            pod 'FirebaseFunctions',        :modular_headers => true
+            pod 'FirebaseRemoteConfig',     :modular_headers => true
+            pod 'FirebaseSessions',         :modular_headers => true
+            pod 'FirebaseStorage',          :modular_headers => true
+            pod 'FirebaseABTesting',        :modular_headers => true
 
-            pod 'FirebaseFirestore',         :modular_headers => true
-            pod 'FirebaseFirestoreInternal', :modular_headers => true
-            pod 'FirebaseFunctions',         :modular_headers => true
-            pod 'FirebaseRemoteConfig',      :modular_headers => true
-            pod 'FirebaseSessions',          :modular_headers => true
-            pod 'FirebaseStorage',           :modular_headers => true
+            # **gRPC/abseil** usados pelo Firestore
+            pod 'gRPC-Core',                :modular_headers => true
+            pod 'gRPC-C++',                 :modular_headers => true
+            pod 'abseil',                   :modular_headers => true
+            pod 'Libuv-gRPC',               :modular_headers => true
           end
 
-          # Extensão — mantém sem pods, MAS com mesma flag use_frameworks! pra não dar mismatch
+          # Extensão de notificação (sem use_frameworks!, herda search_paths)
           target 'ImageNotification' do
             inherit! :search_paths
-            use_frameworks! :linkage => :dynamic
           end
 
           post_install do |installer|
-            def append_unique(bs, key, extra)
-              val = bs[key] || '$(inherited)'
-              s = val.to_s
-              bs[key] = (s.include?(extra) ? s : (s + ' ' + extra))
+            def tweak(bs)
+              bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+              bs['CLANG_ENABLE_MODULES'] = 'YES'
+              bs['SWIFT_VERSION'] = '5.0'
+              bs['DEFINES_MODULE'] = 'YES'
+              bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+              # Evita -Werror=non-modular-include-in-framework-module virar erro
+              bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+              extra = bs['OTHER_CFLAGS']
+              extra = [extra].compact + ['-Wno-non-modular-include-in-framework-module']
+              bs['OTHER_CFLAGS'] = extra.join(' ')
+              bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
             end
 
             installer.pods_project.targets.each do |t|
-              flutter_additional_ios_build_settings(t)
+              t.build_configurations.each { |c| tweak(c.build_settings) }
 
-              t.build_configurations.each do |c|
-                bs = c.build_settings
-                bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                bs['CLANG_ENABLE_MODULES'] = 'YES'
-                bs['SWIFT_VERSION'] = '5.0'
-                bs['ENABLE_BITCODE'] = 'NO'
-                bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
-                bs['DEFINES_MODULE'] = 'YES'
-                # evita confusão no sim durante o archive
-                bs['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-
-                # headers e ldflags
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_TARGET_SRCROOT}/Sources/**/include"')
-                append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
-
-                # plugin que quebrava verificação de interface
-                if t.name == 'tap_google_pay_kit_flutter'
+              # tap_google_pay_kit_flutter: desliga interface Swift
+              if t.name == 'tap_google_pay_kit_flutter'
+                t.build_configurations.each do |c|
+                  bs = c.build_settings
                   bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
                   bs['SWIFT_SERIALIZE_MODULE_INTERFACE'] = 'NO'
-                  append_unique(bs, 'OTHER_SWIFT_FLAGS', '-no-verify-emitted-module-interface')
-                end
-
-                if t.name == 'ImageNotification'
-                  bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                  bs['SWIFT_VERIFY_EMITTED_MODULE_INTERFACE'] = 'NO'
+                  bs['OTHER_SWIFT_FLAGS'] = [bs['OTHER_SWIFT_FLAGS'], '-no-verify-emitted-module-interface'].compact.join(' ')
                 end
               end
             end
 
+            # Também no projeto do Runner
             installer.aggregate_targets.each do |agg|
               agg.user_project.build_configurations.each do |config|
                 config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -194,28 +192,22 @@ workflows:
           done
           prepend_once () {
             local file="$1"; local line="$2"
-            if grep -Fqx "$line" "$file"; then return 0; fi
-            tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"
+            if ! grep -Fqx "$line" "$file"; then
+              tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"
+            fi
           }
           prepend_once ios/Flutter/Debug.xcconfig   '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"'
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
-          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; sed -n '1,3p' "$f" || true; done
-
-      - name: Zerar caches (DerivedData e Pods) p/ build limpo mesmo
-        script: |
-          set -euo pipefail
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
+          for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; head -n 3 "$f" || true; done
 
       - name: CocoaPods install (limpo)
         script: |
           set -euo pipefail
-          source $CM_ENV || true
+          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
           cd ios
           pod repo update
           pod install --verbose
-          echo "Pods instalados."
           cd ..
 
       - name: Importar certificado no keychain (sem interação)
@@ -238,12 +230,9 @@ workflows:
       - name: Criar/baixar perfis de provisionamento (App Store)
         script: |
           set -euo pipefail
-          app-store-connect fetch-signing-files "$APP_BUNDLE_ID" \
-            --type IOS_APP_STORE --create --verbose
-          app-store-connect fetch-signing-files "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" \
-            --type IOS_APP_STORE --create --verbose || true
-          app-store-connect fetch-signing-files "$EXT_WIDGET_BUNDLE_ID" \
-            --type IOS_APP_STORE --create --verbose || true
+          app-store-connect fetch-signing-files "$APP_BUNDLE_ID" --type IOS_APP_STORE --create --verbose
+          app-store-connect fetch-signing-files "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" --type IOS_APP_STORE --create --verbose || true
+          app-store-connect fetch-signing-files "$EXT_WIDGET_BUNDLE_ID" --type IOS_APP_STORE --create --verbose || true
 
       - name: Aplicar perfis ao projeto
         script: |
@@ -262,29 +251,18 @@ workflows:
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
 
-          # App
-          APP_PROFILE_NAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
-            | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
-            | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
-            | grep -m1 "$APP_BUNDLE_ID" -B1 | head -n1 || true)
-          if [ -n "$APP_PROFILE_NAME" ]; then
-            /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $APP_PROFILE_NAME" "$DEST"
-          fi
-
-          # Extensões se houver perfil
-          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
-            [ -n "$BID" ] || continue
-            PNAME=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+          get_profile_name () {
+            ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
               | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
               | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
-              | grep -m1 "$BID" -B1 | head -n1 || true)
-            if [ -n "$PNAME" ]; then
-              /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $PNAME" "$DEST"
-            fi
+              | grep -m1 "$1" -B1 | head -n1 || true
+          }
+          PNAME=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$PNAME" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $PNAME" "$DEST"
+          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
+            [ -n "$BID" ] || continue
+            P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
           done
-
-          echo "=== ExportOptions.plist ==="
-          /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
+          echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
 
       - name: Build IPA assinado (Release)
         script: |
@@ -302,14 +280,11 @@ workflows:
           set -e
           exit $status
 
-      - name: Diagnóstico pós-build (erros claros)
+      - name: Diagnóstico pós-build (grep curto)
         script: |
           set -euo pipefail
-          echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|failed to verify module interface" build_logs/flutter_build_verbose.log | head -n 200 || true
-          else
-            echo "Log build_logs/flutter_build_verbose.log não encontrado."
+            grep -nE "error:|Swift(EmitModule|Compile) Error|no such module|file not found|failed to verify module interface|modulemap|non-modular" build_logs/flutter_build_verbose.log | head -n 200 || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
@@ -324,22 +299,13 @@ workflows:
 
           mkdir -p ~/.private_keys
           KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
-
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
-          ls -l ~/.private_keys/ || true
-
-          xcrun altool --upload-app \
-            --type ios \
-            -f "$IPA_PATH" \
-            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --verbose
-
+          xcrun altool --upload-app --type ios -f "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" --verbose
           echo "Upload disparado: $IPA_PATH"
 
     artifacts:
