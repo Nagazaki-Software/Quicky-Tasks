@@ -177,6 +177,7 @@ workflows:
         script: |
           set -euo pipefail
           PATTERN='^#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
+
           patch_dir () {
             DIR="$1"
             [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
@@ -185,17 +186,35 @@ workflows:
             find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
             | while IFS= read -r -d '' F; do
                 if grep -qE "$PATTERN" "$F"; then
-                  # troca include por módulo
                   perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$F"
                   echo "Patchei: $F"
                 fi
               done
           }
-          # Plugins via symlink do iOS
+
+          # Plugins via symlink do iOS e cache do pub
           patch_dir "ios/.symlinks/plugins"
-          # Plugins do cache (hosted + git), incluindo darwin/**
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
           patch_dir "$HOME/.pub-cache/git"
+
+          # Também patchar o SDK do Flutter (inclui integration_test)
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          if [ -f "$FLUTTER_XCC" ]; then
+            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
+            if [ -n "${FLUTTER_ROOT:-}" ] && [ -d "$FLUTTER_ROOT" ]; then
+              IT_HDR="$FLUTTER_ROOT/packages/integration_test/ios/integration_test/Sources/integration_test/include/IntegrationTestPlugin.h"
+              if [ -f "$IT_HDR" ] && grep -qE "$PATTERN" "$IT_HDR"; then
+                perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$IT_HDR"
+                echo "Patchei: $IT_HDR"
+              fi
+              # (Opcional) varrer outros pacotes iOS do SDK
+              patch_dir "$FLUTTER_ROOT/packages"
+            else
+              echo "FLUTTER_ROOT não encontrado ou inacessível (não foi possível varrer SDK)."
+            fi
+          else
+            echo "ios/Flutter/Generated.xcconfig não encontrado; pulando patch no SDK do Flutter."
+          fi
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
@@ -303,7 +322,7 @@ workflows:
           if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | head -c 50 | grep -q "BEGIN"; then
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           else
-            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 -D > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           app-store-connect publish --path "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --issuerId "$APP_STORE_CONNECT_ISSUER_ID" --privateKeyPath ~/.private_keys/AuthKey_"${KEY_ID}".p8 --verbose
