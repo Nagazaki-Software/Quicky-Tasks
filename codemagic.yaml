@@ -9,8 +9,8 @@ workflows:
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
         EXT_WIDGET_BUNDLE_ID: com.nagazakisoftware.quick.Quicky-Widget
       groups:
-        - appstore_credentials        # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
-        - ios_signing_files           # IOS_DISTRIBUTION_CERT (base64 .p12) e CERTIFICATE_PASSWORD
+        - appstore_credentials
+        - ios_signing_files
     cache:
       cache_paths:
         - ~/.pub-cache
@@ -51,14 +51,12 @@ workflows:
         script: |
           set -euo pipefail
           mkdir -p ios/Runner
-          if [ ! -f ios/Runner/SwiftDummy.swift ]; then
-            cat > ios/Runner/SwiftDummy.swift <<'SWIFT'
-            import Foundation
-            @objc class SwiftDummy: NSObject {}
-            SWIFT
-            echo "Criado ios/Runner/SwiftDummy.swift"
+          SWIFT_FILE="ios/Runner/SwiftDummy.swift"
+          if [ ! -f "$SWIFT_FILE" ]; then
+            printf '%s\n' 'import Foundation' '@objc class SwiftDummy: NSObject {}' > "$SWIFT_FILE"
+            echo "Criado $SWIFT_FILE"
           else
-            echo "Já existe ios/Runner/SwiftDummy.swift"
+            echo "Já existe $SWIFT_FILE"
           fi
 
       - name: Escrever/Atualizar Podfile (pods estáticos + modular_headers + fix no tap_google_pay_kit_flutter)
@@ -94,7 +92,7 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # App principal (pods estáticos; NÃO usar use_frameworks!)
+          # App principal — pods estáticos (NÃO usar use_frameworks!)
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
@@ -105,7 +103,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # modular_headers só onde o validador Swift exige (Firebase & cia)
+            # modular_headers somente onde precisa (Firebase & cia)
             pod 'SDWebImage',               :modular_headers => true
 
             pod 'FirebaseABTesting',        :modular_headers => true
@@ -131,7 +129,7 @@ workflows:
             pod 'FirebaseStorage',           :modular_headers => true
           end
 
-          # Extensão de notificação sem pods (independente)
+          # Extensão sem pods (independente do Firebase)
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -154,9 +152,8 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # módulos Swift sim, mas SEM library evolution
+                # Expor módulos p/ Swift, mas sem library evolution
                 bs['DEFINES_MODULE'] = 'YES'
-                # não setar BUILD_LIBRARY_FOR_DISTRIBUTION globalmente
 
                 # headers/ldflags necessários
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
