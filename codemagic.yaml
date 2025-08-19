@@ -3,7 +3,9 @@ workflows:
     name: iOS Release (App Store Connect)
     environment:
       flutter: stable
-      xcode: latest
+      # Evite "latest" para não quebrar a cada atualização do Xcode/macOS
+      # 15.4 é estável e compila Swift 5.10; ajuste se seu projeto exigir outra.
+      xcode: 15.4
       vars:
         APP_BUNDLE_ID: com.nagazakisoftware.quick
         EXT_IMAGE_NOTIFICATION_BUNDLE_ID: com.nagazakisoftware.quick.ImageNotification
@@ -11,31 +13,35 @@ workflows:
       groups:
         - appstore_credentials
         - ios_signing_files
+
     cache:
       cache_paths:
         - ~/.pub-cache
         - ~/Library/Caches/CocoaPods
         - ~/.gem
+        - ios/Pods
 
     scripts:
       - name: Versions
         script: |
           set -euo pipefail
-          flutter --version && xcodebuild -version
+          flutter --version
+          xcodebuild -version
           which ruby || true; ruby -v || true
           which pod  || true; pod --version || true
 
-      - name: Install CocoaPods 1.16.2 (sem rbenv; persist PATH)
-        script: |
-          set -euo pipefail
-          export GEM_HOME="$HOME/.gem"
-          export GEM_BIN="$GEM_HOME/bin"
-          export PATH="$GEM_BIN:$PATH"
-          /usr/bin/gem install cocoapods -v 1.16.2 -N || true
-          echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
-          echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
-          echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
-          ruby -v && gem env home && pod --version
+      # Use o CocoaPods do ambiente. Se precisar forçar versão, descomente o bloco de instalação.
+      # - name: Instalar CocoaPods (opcional, só se precisar pin de versão)
+      #   script: |
+      #     set -euo pipefail
+      #     export GEM_HOME="$HOME/.gem"
+      #     export GEM_BIN="$GEM_HOME/bin"
+      #     export PATH="$GEM_BIN:$PATH"
+      #     /usr/bin/gem install cocoapods -v 1.15.2 -N
+      #     echo "export GEM_HOME=$GEM_HOME" >> $CM_ENV
+      #     echo "export GEM_BIN=$GEM_BIN"   >> $CM_ENV
+      #     echo 'export PATH="$GEM_BIN:$PATH"' >> $CM_ENV
+      #     ruby -v && gem env home && pod --version
 
       - name: Flutter clean, precache & pub get
         script: |
@@ -56,19 +62,27 @@ workflows:
           fi
           # 2) .flutter-plugins-dependencies (JSON) — remover entradas pelo name
           if [ -f .flutter-plugins-dependencies ]; then
-            python3 -c "import json,sys; p='.flutter-plugins-dependencies'; d=json.load(open(p)); 
-              def drop(lst): 
-                  return [x for x in lst if not (isinstance(x,dict) and x.get('name')=='tap_google_pay_kit_flutter')]
-              ps=d.get('plugins'); 
-              if isinstance(ps, dict):
-                  for k,v in list(ps.items()):
-                      if isinstance(v,list): ps[k]=drop(v)
-                      elif isinstance(v,dict):
-                          for kk,vv in list(v.items()):
-                              if isinstance(vv,list): v[kk]=drop(vv)
-              open(p,'w').write(json.dumps(d))" || true
-                          echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
-                        fi
+            python3 - <<'PY'
+import json, sys
+p = '.flutter-plugins-dependencies'
+with open(p) as f:
+    d = json.load(f)
+def drop(lst):
+    return [x for x in lst if not (isinstance(x, dict) and x.get('name') == 'tap_google_pay_kit_flutter')]
+ps = d.get('plugins')
+if isinstance(ps, dict):
+    for k, v in list(ps.items()):
+        if isinstance(v, list):
+            ps[k] = drop(v)
+        elif isinstance(v, dict):
+            for kk, vv in list(v.items()):
+                if isinstance(vv, list):
+                    v[kk] = drop(vv)
+with open(p, 'w') as f:
+    json.dump(d, f)
+PY
+            echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
+          fi
 
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
@@ -106,7 +120,7 @@ workflows:
           flutter_ios_podfile_setup
 
           target 'Runner' do
-            # Instala todos os pods dos plugins do Flutter (inclui o pod 'Flutter')
+            # Instala pods de plugins (inclui 'Flutter')
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
             # Braintree
@@ -116,7 +130,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # Modular headers (Firebase + deps + gRPC/abseil) p/ Swift + estático
+            # Modular headers p/ evitar conflitos de módulo (Firebase/gRPC/etc)
             pod 'SDWebImage',               :modular_headers => true
             pod 'FirebaseCore',             :modular_headers => true
             pod 'FirebaseCoreExtension',    :modular_headers => true
@@ -144,7 +158,7 @@ workflows:
             pod 'Libuv-gRPC',               :modular_headers => true
           end
 
-          # Extensão de notificação (sem use_frameworks! para casar com o Runner)
+          # Extensão de notificação (mesmo linkage do Runner)
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -193,6 +207,7 @@ workflows:
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
           cd ios
+          # Usando CDN, repo update não é obrigatório; mantenho para casos de spec novo.
           pod repo update
           pod install --verbose
           cd ..
@@ -200,9 +215,11 @@ workflows:
       - name: Importar certificado no keychain (sem interação)
         script: |
           set -euo pipefail
+          : "${IOS_DISTRIBUTION_CERT:?Falta IOS_DISTRIBUTION_CERT (p12 base64)}"
+          : "${CERTIFICATE_PASSWORD:?Falta CERTIFICATE_PASSWORD}"
+          KEYCHAIN_NAME="build.keychain"
           mkdir -p "$HOME/Library/MobileDevice/Certificates"
           echo "$IOS_DISTRIBUTION_CERT" | base64 -D > "$HOME/Library/MobileDevice/Certificates/dist.p12"
-          KEYCHAIN_NAME="build.keychain"
           security create-keychain -p "" "$KEYCHAIN_NAME"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
           security unlock-keychain -p "" "$KEYCHAIN_NAME"
@@ -270,7 +287,10 @@ workflows:
         script: |
           set -euo pipefail
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            grep -nE "error:|Swift(EmitModule|Compile) Error|no such module|file not found|failed to verify module interface|modulemap|non-modular" build_logs/flutter_build_verbose.log | head -n 200 || true
+            echo "----- Erros comuns detectados -----"
+            grep -nE "error:|Swift(EmitModule|Compile) Error|no such module|file not found|failed to verify module interface|modulemap|non-modular|Undefined symbols for architecture|ld: symbol\(s\) not found" build_logs/flutter_build_verbose.log | head -n 300 || true
+            echo "----- Caminhos de toolchain -----"
+            grep -nE "Xcode|Developer|Toolchain" build_logs/flutter_build_verbose.log | head -n 50 || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
@@ -289,7 +309,8 @@ workflows:
             printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/.private_keys/AuthKey_"${KEY_ID}".p8
           fi
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
-          xcrun altool --upload-app --type ios -f "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" --verbose
+          # Preferível usar o utilitário do App Store Connect do Codemagic
+          app-store-connect publish --path "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --issuerId "$APP_STORE_CONNECT_ISSUER_ID" --privateKeyPath ~/.private_keys/AuthKey_"${KEY_ID}".p8 --verbose
           echo "Upload disparado: $IPA_PATH"
 
     artifacts:
