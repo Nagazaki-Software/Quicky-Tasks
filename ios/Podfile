@@ -7,6 +7,9 @@ install! 'cocoapods',
   :generate_multiple_pod_projects => false,
   :integrate_targets => true
 
+# ✅ Garante module maps para dependências que não os definem por padrão
+use_modular_headers!
+
 project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,
@@ -26,27 +29,22 @@ end
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 flutter_ios_podfile_setup
 
-# ⚠️ Sem use_frameworks! e sem use_modular_headers! global
-# Deixe CocoaPods gerar libs estáticas por padrão (mais saudável para Flutter)
-
 target 'Runner' do
+  use_frameworks! :linkage => :static   # mantém estático (mais estável com Flutter)
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree (ok com libs estáticas)
+  # Braintree (compatível com libs estáticas)
   pod 'Braintree/Core',          '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
   pod 'Braintree/ApplePay',      '~> 6.36'
 
-  # 🔑 Modularização seletiva para pods problemáticos
-  pod 'FirebaseABTesting', :modular_headers => true
-  pod 'FirebaseCore', :modular_headers => true
-  pod 'FirebaseCoreExtension', :modular_headers => true
-  pod 'GoogleUtilities', :modular_headers => true
+  # (Opcional) se você usa DKPhotoGallery direto em algum plugin/projeto:
+  # pod 'DKPhotoGallery'  # use_modular_headers! já cobre o module map
 end
 
-# Extensão de notificação
+# Extensão de notificação (se existir no projeto)
 target 'ImageNotification' do
   inherit! :search_paths
 end
@@ -57,6 +55,7 @@ post_install do |installer|
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+      # Evita embed manual das Swift stdlibs; o Xcode gerencia isso
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
