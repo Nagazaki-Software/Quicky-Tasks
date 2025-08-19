@@ -36,28 +36,6 @@ workflows:
           flutter pub get
           test -f ios/Flutter/Generated.xcconfig || (echo "Generated.xcconfig não foi criado!" && exit 1)
 
-      - name: Remover plugin tap_google_pay_kit_flutter (arquivos do Flutter)
-        script: |
-          set -euo pipefail
-          # 1) .flutter-plugins (texto)
-          if [ -f .flutter-plugins ]; then
-            grep -v '^tap_google_pay_kit_flutter=' .flutter-plugins > .flutter-plugins.tmp || true
-            mv -f .flutter-plugins.tmp .flutter-plugins
-            echo "tap_google_pay_kit_flutter removido de .flutter-plugins"
-          fi
-          # 2) .flutter-plugins-dependencies (JSON) — remover entradas pelo name (one-liner Python, sem heredoc)
-          if [ -f .flutter-plugins-dependencies ]; then
-            python3 -c 'import json; p=".flutter-plugins-dependencies"; d=json.load(open(p)); \
-def drop(lst): return [x for x in lst if not (isinstance(x,dict) and x.get("name")=="tap_google_pay_kit_flutter")]; \
-ps=d.get("plugins"); \
-if isinstance(ps,dict): \
-  [ps.__setitem__(k, drop(v)) if isinstance(v,list) else \
-   ( [v.__setitem__(kk, drop(vv)) for kk,vv in list(v.items()) if isinstance(vv,list)] ) \
-   for k,v in list(ps.items())]; \
-json.dump(d, open(p,"w"))'
-            echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
-          fi
-
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
           set -euo pipefail
