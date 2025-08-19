@@ -93,7 +93,6 @@ workflows:
             inherit! :search_paths
           end
 
-          # Deixa todos os pods "modulares" e com caminhos de header/framework do Flutter acessíveis
           post_install do |installer|
             projects = [installer.pods_project]
             installer.aggregate_targets.each { |agg| projects << agg.user_project }
@@ -119,6 +118,7 @@ workflows:
                     '$(PODS_ROOT)/Headers/Public',
                     '$(PODS_ROOT)/Headers/Public/**',
                     '$(SRCROOT)/Flutter',
+                    '$(SRCROOT)/Flutter/Flutter.framework/Headers',
                     '$(PROJECT_DIR)/Flutter',
                     '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
                     '$(PODS_ROOT)/Flutter/Flutter.framework/Headers',
@@ -141,12 +141,21 @@ workflows:
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  # Sinaliza onde está o modulemap do Flutter para o compilador Swift
+                  # Onde o Swift deve procurar headers (inclui fallback local)
+                  bs['SWIFT_INCLUDE_PATHS'] = [
+                    '$(inherited)',
+                    '$(SRCROOT)/Flutter/Flutter.framework/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Headers'
+                  ].join(' ')
+
+                  # Sinaliza modulemap do Flutter (fallback local + engine)
                   existing_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
                   bs['OTHER_SWIFT_FLAGS'] = [
                     existing_flags,
-                    '-Xcc',
-                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
+                    '-Xcc', '-fmodule-map-file=$(SRCROOT)/Flutter/Flutter.framework/Modules/module.modulemap',
+                    '-Xcc', '-fmodule-map-file=${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap',
+                    '-Xcc', '-fmodule-map-file=${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework/Modules/module.modulemap'
                   ].join(' ')
 
                   if t.name == 'ImageNotification'
@@ -175,6 +184,30 @@ workflows:
           prepend_once ios/Flutter/Profile.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"'
           prepend_once ios/Flutter/Release.xcconfig '#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"'
           for f in ios/Flutter/*.xcconfig; do echo "---- $f ----"; head -n 3 "$f" || true; done
+
+      - name: Garantir modulemap/headers do Flutter (fallback local)
+        script: |
+          set -euo pipefail
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          test -f "$FLUTTER_XCC" || { echo "Generated.xcconfig ausente"; exit 1; }
+          FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r')
+          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+
+          # Candidatos de engine (release / generic)
+          CAND1="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Flutter.framework"
+          CAND2="$FLUTTER_ROOT/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Flutter.framework"
+
+          SRC=""
+          for C in "$CAND1" "$CAND2"; do
+            if [ -f "$C/Modules/module.modulemap" ] && [ -d "$C/Headers" ]; then SRC="$C"; break; fi
+          done
+          [ -n "$SRC" ] || { echo "module.modulemap do Flutter não encontrado no engine"; exit 1; }
+
+          DEST="ios/Flutter/Flutter.framework"
+          mkdir -p "$DEST/Headers" "$DEST/Modules"
+          rsync -a "$SRC/Headers/" "$DEST/Headers/"
+          cp "$SRC/Modules/module.modulemap" "$DEST/Modules/module.modulemap"
+          echo "Copiado modulemap e headers para $DEST"
 
       - name: CocoaPods install (limpo)
         script: |
