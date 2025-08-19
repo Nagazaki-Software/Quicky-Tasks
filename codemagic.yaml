@@ -53,7 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Frameworks estáticos funcionam melhor com plugins no Xcode 15/16
+          # Frameworks estáticos ajudam nos plugins no Xcode 15/16
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -153,7 +153,7 @@ workflows:
             f="ios/Flutter/${mode}.xcconfig"; test -f "$f" || touch "$f"
           done
           prepend_once () {
-            local file="$1"; local line="$2"
+            file="$1"; line="$2"
             if ! grep -Fqx "$line" "$file"; then
               tmp="$(mktemp -t xcconf)"; printf '%s\n' "$line" > "$tmp"; cat "$file" >> "$tmp"; mv -f "$tmp" "$file"
             fi
@@ -167,7 +167,6 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          # Evita podspec travado
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
@@ -177,18 +176,20 @@ workflows:
       - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
-          # Padrão do import problemático
-          PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
+          PATTERN='^#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
           patch_dir () {
-            local DIR="$1"
-            [ -d "$DIR" ] || return 0
+            DIR="$1"
+            [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
             echo "Varrendo: $DIR"
-            # lista arquivos interessantes
-            mapfile -t FILES < <(grep -RIlE "$PATTERN" "$DIR" --include='*.h' --include='*.m' --include='*.mm' --include='*.pch' 2>/dev/null || true)
-            for F in "${FILES[@]}"; do
-              perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$F"
-              echo "Patchei import em: $F"
-            done
+            # Varre .h/.m/.mm/.pch de forma POSIX (sem mapfile)
+            find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
+            | while IFS= read -r -d '' F; do
+                if grep -qE "$PATTERN" "$F"; then
+                  # troca include por módulo
+                  perl -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/' "$F"
+                  echo "Patchei: $F"
+                fi
+              done
           }
           # Plugins via symlink do iOS
           patch_dir "ios/.symlinks/plugins"
@@ -255,7 +256,6 @@ workflows:
 
       - name: Build IPA assinado (Release)
         script: |
-          # Não aborta aqui; salva status pro diagnóstico
           set +e
           mkdir -p build_logs
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
