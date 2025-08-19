@@ -77,7 +77,6 @@ workflows:
 
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
             # Braintree (se já vier via plugin, remova)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
@@ -186,57 +185,7 @@ workflows:
           # Fallback no cache do pub (ex.: wakelock_plus)
           find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
 
-      - name: Gerar ExportOptions.plist (App Store)
-        script: |
-          set -euo pipefail
-          DEST="$CM_BUILD_DIR/export_options.plist"
-          /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
-          get_profile_name () {
-            ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
-              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
-              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
-              | grep -m1 "$1" -B1 | head -n1 || true
-          }
-          P=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $P" "$DEST"
-          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
-            [ -n "$BID" ] || continue
-            P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
-          done
-          echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
-
-      - name: Build IPA assinado (Release)
-        script: |
-          set -euo pipefail
-          mkdir -p build_logs
-          echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
-          source $CM_ENV
-          export NSUnbufferedIO=YES
-          set +e
-          flutter build ipa --release \
-            --build-number="$FLUTTER_BUILD_NUMBER" \
-            --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
-            | tee build_logs/flutter_build_verbose.log
-          status=${PIPESTATUS[0]}
-          set -e
-          exit $status
-
-      - name: Diagnóstico pós-build (Swift/Clang)
-        script: |
-          set -euo pipefail
-          echo "----- PRIMEIRA linha com error/fatal -----"
-          grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
-          echo "----- 200 linhas ao redor -----"
-          awk '
-            /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
-            {a[NR%400]=$0}
-          ' build_logs/flutter_build_verbose.log || true
-
+      # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
       - name: Importar certificado no keychain (sem interação)
         script: |
           set -euo pipefail
@@ -267,6 +216,58 @@ workflows:
         script: |
           set -euo pipefail
           xcode-project use-profiles
+
+      - name: Gerar ExportOptions.plist (App Store)
+        script: |
+          set -euo pipefail
+          DEST="$CM_BUILD_DIR/export_options.plist"
+          /usr/libexec/PlistBuddy -c "Clear dict" "$DEST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :method string app-store"            "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic"      "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :stripSwiftSymbols bool true"        "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :uploadBitcode bool false"           "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool false" "$DEST"
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict"          "$DEST"
+          get_profile_name () {
+            ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
+              | xargs -I{} /usr/bin/security cms -D -i {} 2>/dev/null \
+              | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin 2>/dev/null \
+              | grep -m1 "$1" -B1 | head -n1 || true
+          }
+          P=$(get_profile_name "$APP_BUNDLE_ID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$APP_BUNDLE_ID string $P" "$DEST"
+          for BID in "$EXT_IMAGE_NOTIFICATION_BUNDLE_ID" "$EXT_WIDGET_BUNDLE_ID"; do
+            [ -n "$BID" ] || continue
+            P=$(get_profile_name "$BID"); [ -n "$P" ] && /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$BID string $P" "$DEST"
+          done
+          echo "=== ExportOptions.plist ==="; /usr/libexec/PlistBuddy -c "Print" "$DEST" || (echo "Falha ao gerar ExportOptions.plist" && exit 1)
+      # --------------------------------------------------------------
+
+      - name: Build IPA assinado (Release)
+        script: |
+          set -euo pipefail
+          mkdir -p build_logs
+          echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
+          source $CM_ENV
+          export NSUnbufferedIO=YES
+          set +e
+          flutter build ipa --release \
+            --build-number="$FLUTTER_BUILD_NUMBER" \
+            --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
+            | tee build_logs/flutter_build_verbose.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit $status
+
+      - name: Diagnóstico pós-build (Swift/Clang)
+        script: |
+          set -euo pipefail
+          echo "----- PRIMEIRA linha com error/fatal -----"
+          grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
+          echo "----- 200 linhas ao redor -----"
+          awk '
+            /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
+            {a[NR%400]=$0}
+          ' build_logs/flutter_build_verbose.log || true
 
       - name: Upload para App Store Connect (TestFlight)
         script: |
