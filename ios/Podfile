@@ -7,7 +7,7 @@ install! 'cocoapods',
   :generate_multiple_pod_projects => false,
   :integrate_targets => true
 
-# ✅ Garante module maps para dependências que não os definem por padrão
+# ✅ Gera module maps para dependências que não os definem por padrão
 use_modular_headers!
 
 project 'Runner', {
@@ -30,21 +30,49 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks! :linkage => :static   # mantém estático (mais estável com Flutter)
+  # Mantém estático (melhor p/ Flutter). Se ainda falhar, podemos trocar para dinâmico.
+  use_frameworks! :linkage => :static
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Braintree (compatível com libs estáticas)
+  # ---- TUAS DEPENDÊNCIAS MANUAIS ----
   pod 'Braintree/Core',          '~> 6.36'
   pod 'Braintree/Card',          '~> 6.36'
   pod 'Braintree/ThreeDSecure',  '~> 6.36'
   pod 'Braintree/DataCollector', '~> 6.36'
   pod 'Braintree/ApplePay',      '~> 6.36'
 
-  # (Opcional) se você usa DKPhotoGallery direto em algum plugin/projeto:
-  # pod 'DKPhotoGallery'  # use_modular_headers! já cobre o module map
+  # ---- FORÇANDO MODULAR HEADERS NAS PROBLEMÁTICAS (do log) ----
+  # DKPhotoGallery reclama do SDWebImage
+  pod 'DKPhotoGallery',         :modular_headers => true
+  pod 'SDWebImage',             :modular_headers => true
+
+  # Firebase e utilitários citados pelo validador
+  pod 'FirebaseABTesting',      :modular_headers => true
+  pod 'FirebaseCore',           :modular_headers => true
+  pod 'FirebaseCoreExtension',  :modular_headers => true
+  pod 'FirebaseCoreInternal',   :modular_headers => true
+  pod 'FirebaseInstallations',  :modular_headers => true
+  pod 'FirebaseAuth',           :modular_headers => true
+  pod 'FirebaseFirestore',      :modular_headers => true
+  pod 'FirebaseFunctions',      :modular_headers => true
+  pod 'FirebaseRemoteConfig',   :modular_headers => true
+  pod 'FirebaseSessions',       :modular_headers => true
+  pod 'FirebaseStorage',        :modular_headers => true
+
+  # Interops citados
+  pod 'FirebaseAuthInterop',        :modular_headers => true
+  pod 'FirebaseAppCheckInterop',    :modular_headers => true
+  pod 'FirebaseMessagingInterop',   :modular_headers => true
+  pod 'RecaptchaInterop',           :modular_headers => true
+
+  # Google utils/transport + nanopb
+  pod 'GoogleUtilities',        :modular_headers => true
+  pod 'GoogleDataTransport',    :modular_headers => true
+  pod 'nanopb',                 :modular_headers => true
 end
 
-# Extensão de notificação (se existir no projeto)
+# Extensão de notificação (se existir)
 target 'ImageNotification' do
   inherit! :search_paths
 end
@@ -55,7 +83,6 @@ post_install do |installer|
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-      # Evita embed manual das Swift stdlibs; o Xcode gerencia isso
       c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
     end
   end
