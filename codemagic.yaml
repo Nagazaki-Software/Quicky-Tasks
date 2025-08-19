@@ -57,18 +57,18 @@ workflows:
           # 2) .flutter-plugins-dependencies (JSON) — remover entradas pelo name
           if [ -f .flutter-plugins-dependencies ]; then
             python3 -c "import json,sys; p='.flutter-plugins-dependencies'; d=json.load(open(p)); 
-def drop(lst): 
-    return [x for x in lst if not (isinstance(x,dict) and x.get('name')=='tap_google_pay_kit_flutter')]
-ps=d.get('plugins'); 
-if isinstance(ps, dict):
-    for k,v in list(ps.items()):
-        if isinstance(v,list): ps[k]=drop(v)
-        elif isinstance(v,dict):
-            for kk,vv in list(v.items()):
-                if isinstance(vv,list): v[kk]=drop(vv)
-open(p,'w').write(json.dumps(d))" || true
-            echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
-          fi
+              def drop(lst): 
+                  return [x for x in lst if not (isinstance(x,dict) and x.get('name')=='tap_google_pay_kit_flutter')]
+              ps=d.get('plugins'); 
+              if isinstance(ps, dict):
+                  for k,v in list(ps.items()):
+                      if isinstance(v,list): ps[k]=drop(v)
+                      elif isinstance(v,dict):
+                          for kk,vv in list(v.items()):
+                              if isinstance(vv,list): v[kk]=drop(vv)
+              open(p,'w').write(json.dumps(d))" || true
+                          echo "tap_google_pay_kit_flutter removido de .flutter-plugins-dependencies"
+                        fi
 
       - name: Criar SwiftDummy.swift no Runner (ativa pipeline Swift)
         script: |
