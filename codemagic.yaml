@@ -159,29 +159,54 @@ workflows:
           pod install --verbose
           cd ..
 
-      - name: Patch imports Flutter nos plugins (Obj-C/Obj-C++/PCH)
+      - name: Patch imports de Flutter nos plugins (Obj-C / Obj-C++ / PCH)
         script: |
           set -euo pipefail
-          PATTERN='^#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
-          replace_block=$'#if __has_include(<Flutter/Flutter.h>)\n#import <Flutter/Flutter.h>\n#else\n@import Flutter;\n#endif'
+
+          # Padrão que identifica '#import <Flutter/Flutter.h>' ou "#import "Flutter/Flutter.h""
+          PATTERN='#import[[:space:]]*[<"]Flutter/Flutter\.h[>"]'
+
+          replace_file () {
+            # Usa perl para substituir de forma robusta (compatível com macOS)
+            perl -0777 -pi -e 's/#import\s*[<"]Flutter\/Flutter\.h[>"]/@import Flutter;/g' "$1"
+          }
 
           patch_dir () {
             DIR="$1"
             [ -d "$DIR" ] || { echo "Skip: $DIR (não existe)"; return 0; }
             echo "Varrendo: $DIR"
+            # Varre .h/.m/.mm/.pch com NUL-separado (resistente a espaços/acentos)
             find "$DIR" -type f \( -name '*.h' -o -name '*.m' -o -name '*.mm' -o -name '*.pch' \) -print0 2>/dev/null \
             | while IFS= read -r -d '' F; do
                 if grep -qE "$PATTERN" "$F"; then
-                  # Substituição multi-linha segura no macOS (BSD sed)
-                  sed -i '' -e "s|$PATTERN|$replace_block|g" "$F"
+                  replace_file "$F"
                   echo "Patchei: $F"
                 fi
               done
           }
 
+          # Plugins via symlink do iOS e cache do pub
           patch_dir "ios/.symlinks/plugins"
           patch_dir "$HOME/.pub-cache/hosted/pub.dev"
           patch_dir "$HOME/.pub-cache/git"
+
+          # (Opcional) também patchar o SDK do Flutter onde alguns headers vivem
+          FLUTTER_XCC="ios/Flutter/Generated.xcconfig"
+          if [ -f "$FLUTTER_XCC" ]; then
+            FLUTTER_ROOT=$(grep -E '^FLUTTER_ROOT=' "$FLUTTER_XCC" | cut -d= -f2- | tr -d '\r' || true)
+            if [ -n "${FLUTTER_ROOT:-}" ] && [ -d "$FLUTTER_ROOT" ]; then
+              IT_HDR="$FLUTTER_ROOT/packages/integration_test/ios/integration_test/Sources/integration_test/include/IntegrationTestPlugin.h"
+              if [ -f "$IT_HDR" ] && grep -qE "$PATTERN" "$IT_HDR"; then
+                replace_file "$IT_HDR"
+                echo "Patchei: $IT_HDR"
+              fi
+            else
+              echo "FLUTTER_ROOT não encontrado ou inacessível; pulando patch no SDK."
+            fi
+          else
+            echo "ios/Flutter/Generated.xcconfig não encontrado; pulando patch no SDK."
+          fi
+
 
       - name: Garantir modulemap do Flutter (se faltando)
         script: |
