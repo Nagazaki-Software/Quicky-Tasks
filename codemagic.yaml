@@ -90,7 +90,7 @@ workflows:
             inherit! :search_paths
           end
 
-          post_install do |installer|
+            post_install do |installer|
             projects = [installer.pods_project]
             installer.aggregate_targets.each { |agg| projects << agg.user_project }
             projects.uniq.each do |proj|
@@ -99,7 +99,7 @@ workflows:
                   bs = c.build_settings
 
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-                  bs['SWIFT_VERSION'] = '5.0'   # Swift 5.x (cobre 5.6)
+                  bs['SWIFT_VERSION'] = '5.0'
                   bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
@@ -133,7 +133,22 @@ workflows:
                     '$(PODS_ROOT)/../Flutter',
                     '$(PODS_ROOT)/../.symlinks/flutter/ios/Flutter',
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
-                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release',
+                    # NOVO: garante que o swiftc ache o Flutter.framework dentro de BuildProducts
+                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter'
+                  ].join(' ')
+
+                  # NOVO: aponta o Swift diretamente pro modulemap e headers do Flutter
+                  bs['SWIFT_INCLUDE_PATHS'] = [
+                    '$(inherited)',
+                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers'
+                  ].join(' ')
+
+                  existing_flags = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                  bs['OTHER_SWIFT_FLAGS'] = [
+                    existing_flags,
+                    '-Xcc',
+                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
                   ].join(' ')
 
                   if t.name == 'ImageNotification'
@@ -143,6 +158,7 @@ workflows:
               end
             end
           end
+
           PODFILE
 
       - name: Patch xcconfigs do Flutter para herdar Pods
