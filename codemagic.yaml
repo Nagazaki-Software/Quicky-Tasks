@@ -61,7 +61,7 @@ workflows:
             echo "Já existe ios/Runner/SwiftDummy.swift"
           fi
 
-      - name: Escrever/Atualizar Podfile (pods estáticos + módulos seletivos + headers do Flutter)
+      - name: Escrever/Atualizar Podfile (pods estáticos + modular_headers + fix no tap_google_pay_kit_flutter)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -94,11 +94,11 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # App principal (sem use_frameworks! => libs estáticas)
+          # App principal (pods estáticos; sem use_frameworks!)
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Garante o pod 'Flutter' publicado pro Swift/ObjC
+            # expõe cabeçalhos do Flutter para plugins ObjC/Swift
             pod 'Flutter', :path => 'Flutter'
 
             # Braintree
@@ -108,7 +108,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # 🔧 Pods que precisam de modulemap quando estáticos (validador Swift do CocoaPods)
+            # 🔧 modular headers onde o validador Swift exige
             pod 'SDWebImage',               :modular_headers => true
 
             pod 'FirebaseABTesting',        :modular_headers => true
@@ -134,7 +134,7 @@ workflows:
             pod 'FirebaseStorage',           :modular_headers => true
           end
 
-          # Extensão de notificação sem pods (independente)
+          # Extensão de notificação sem pods
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -157,12 +157,11 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # Facilita import de módulos pelos plugins Swift
+                # módulos Swift sim, mas sem library evolution global
                 bs['DEFINES_MODULE'] = 'YES'
-                bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-                bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                # NÃO forçar BUILD_LIBRARY_FOR_DISTRIBUTION aqui (deixe NO por padrão)
 
-                # Headers públicos + headers do Flutter.xcframework
+                # headers comuns
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/../Flutter/Flutter.xcframework/ios-arm64/Flutter.framework/Headers"')
@@ -172,6 +171,12 @@ workflows:
 
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                end
+
+                # 👇 Workaround específico: desliga .swiftinterface no plugin problemático
+                if t.name == 'tap_google_pay_kit_flutter'
+                  bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
+                  bs['SWIFT_SERIALIZE_MODULE_INTERFACE'] = 'NO'
                 end
               end
             end
@@ -208,9 +213,7 @@ workflows:
           cd ios
           pod repo update
           pod install --verbose
-          # Apenas log informativo (sem falhar se não achar Flutter.h em caminho específico)
-          echo "Pods instalados. Mostrando alguns headers de referência:"
-          ls -1 Pods/Headers/Public | head -n 50 || true
+          echo "Pods instalados."
           cd ..
 
       - name: Importar certificado no keychain (sem interação)
@@ -302,7 +305,7 @@ workflows:
           set -euo pipefail
           echo "==== Grep no flutter_build_verbose.log ===="
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|fatal error" build_logs/flutter_build_verbose.log | head -n 200 || true
+            grep -nE "error:|Swift(EmitModule|Compile).*failed|No such module 'Flutter'|'Flutter/Flutter.h' file not found|failed to verify module interface" build_logs/flutter_build_verbose.log | head -n 200 || true
           else
             echo "Log build_logs/flutter_build_verbose.log não encontrado."
           fi
