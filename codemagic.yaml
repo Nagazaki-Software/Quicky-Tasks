@@ -98,7 +98,9 @@ workflows:
                   bs = c.build_settings
 
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                  # ⚠️ Xcode aceita "5" ou "5.0". Isso ativa o modo Swift 5.x (cobre 5.6+).
                   bs['SWIFT_VERSION'] = '5.0'
+
                   bs['EXPLICIT_MODULES'] = 'NO'
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
@@ -180,9 +182,7 @@ workflows:
               echo "Patchei import em: $F"
             fi
           }
-          # Plugins via symlink
           find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
-          # Fallback no cache do pub (ex.: wakelock_plus)
           find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null | while IFS= read -r -d '' F; do patch_file "$F"; done
 
       # ----------- ASSINATURA E PERFIS (ANTES DO BUILD!) -----------
@@ -244,23 +244,26 @@ workflows:
 
       - name: Build IPA assinado (Release)
         script: |
-          set -euo pipefail
+          # Não aborta aqui; salva status pro diagnóstico
+          set +e
           mkdir -p build_logs
           echo "export FLUTTER_BUILD_NUMBER=$(date +%s)" >> $CM_ENV
           source $CM_ENV
           export NSUnbufferedIO=YES
-          set +e
           flutter build ipa --release \
             --build-number="$FLUTTER_BUILD_NUMBER" \
             --export-options-plist="$CM_BUILD_DIR/export_options.plist" -v \
             | tee build_logs/flutter_build_verbose.log
           status=${PIPESTATUS[0]}
-          set -e
-          exit $status
+          echo "export BUILD_STATUS=$status" >> $CM_ENV
+          echo "Build terminou com status: $status"
+          # Continua para rodar o diagnóstico
+          exit 0
 
       - name: Diagnóstico pós-build (Swift/Clang)
         script: |
           set -euo pipefail
+          source $CM_ENV || true
           echo "----- PRIMEIRA linha com error/fatal -----"
           grep -m1 -niE "error:|fatal error:" build_logs/flutter_build_verbose.log || true
           echo "----- 200 linhas ao redor -----"
@@ -268,10 +271,16 @@ workflows:
             /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%400]; exit 0}
             {a[NR%400]=$0}
           ' build_logs/flutter_build_verbose.log || true
+          echo "Status capturado: ${BUILD_STATUS:-0}"
 
       - name: Upload para App Store Connect (TestFlight)
         script: |
           set -euo pipefail
+          source $CM_ENV || true
+          if [ "${BUILD_STATUS:-0}" -ne 0 ]; then
+            echo "Build falhou, pulando upload."
+            exit 0
+          fi
           IPA_PATH=$(ls -1 build/ios/ipa/*.ipa | head -n1)
           test -f "$IPA_PATH" || (echo "IPA não encontrado!" && exit 1)
           : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Falta APP_STORE_CONNECT_KEY_IDENTIFIER (Key ID)}"
@@ -287,6 +296,12 @@ workflows:
           chmod 600 ~/.private_keys/AuthKey_"${KEY_ID}".p8
           app-store-connect publish --path "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" --issuerId "$APP_STORE_CONNECT_ISSUER_ID" --privateKeyPath ~/.private_keys/AuthKey_"${KEY_ID}".p8 --verbose
           echo "Upload disparado: $IPA_PATH"
+
+      - name: Finalizar com status do build
+        script: |
+          set -euo pipefail
+          source $CM_ENV || true
+          exit ${BUILD_STATUS:-0}
 
     artifacts:
       - build/ios/ipa/*.ipa
