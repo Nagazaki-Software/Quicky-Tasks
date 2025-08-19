@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5, sem modular headers)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos, Swift 5)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,7 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # 🔧 Usar frameworks (estáticos) — ajuda com Xcode 15/16 e headers do Flutter
+          # ✅ Ajuda muito com Xcode 15/16 + plugins
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -78,7 +78,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (se já vier via plugin, remova estas linhas)
+            # Braintree (se já vier via plugin, remova)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -91,7 +91,6 @@ workflows:
           end
 
           post_install do |installer|
-            # Aplica em TODOS os targets (Pods + Runner/Extensions)
             projects = [installer.pods_project]
             installer.aggregate_targets.each { |agg| projects << agg.user_project }
             projects.uniq.each do |proj|
@@ -99,38 +98,41 @@ workflows:
                 t.build_configurations.each do |c|
                   bs = c.build_settings
 
-                  # iOS/Swift básicos
+                  # Básico iOS/Swift
                   bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
                   bs['SWIFT_VERSION'] = '5.0'
 
-                  # 🚫 Desliga Explicit Module Builds (Xcode 15/16)
+                  # Evita chatices de módulo no Xcode 15/16
                   bs['EXPLICIT_MODULES'] = 'NO'
-
-                  # ✅ Permite includes não-modulares e evita quebrar por warning
                   bs['CLANG_ENABLE_MODULES'] = 'YES'
                   bs['DEFINES_MODULE'] = 'YES'
                   bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+                  bs['ENABLE_BITCODE'] = 'NO'
 
-                  # 🔎 Garante headers/framworks do Flutter visíveis p/ TODOS os pods (ex.: wakelock_plus)
-                  bs['HEADER_SEARCH_PATHS'] = %w[
-                    $(inherited)
-                    $(PODS_ROOT)/Headers/Public
-                    $(PODS_ROOT)/Headers/Public/**
-                    $(PODS_ROOT)/Flutter/Flutter.xcframework/ios-arm64/Headers
-                    $(PODS_ROOT)/Flutter/Flutter.xcframework/ios-arm64_x86_64-simulator/Headers
+                  # 🔎 Caminhos pro Flutter para TODOS os pods (ex.: wakelock_plus)
+                  bs['HEADER_SEARCH_PATHS'] = [
+                    '$(inherited)',
+                    '$(PODS_ROOT)/Headers/Public',
+                    '$(PODS_ROOT)/Headers/Public/**',
+                    '$(SRCROOT)/Flutter',
+                    '$(PROJECT_DIR)/Flutter',
+                    '$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm64/Headers',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
                   ].join(' ')
 
-                  bs['FRAMEWORK_SEARCH_PATHS'] = %w[
-                    $(inherited)
-                    $(PODS_ROOT)
-                    $(PODS_ROOT)/Flutter
+                  bs['FRAMEWORK_SEARCH_PATHS'] = [
+                    '$(inherited)',
+                    '$(PODS_ROOT)',
+                    '$(PODS_ROOT)/Flutter',
+                    '$(SRCROOT)/Flutter',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios',
+                    '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  # Não precisamos de library evolution aqui
-                  bs.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
-
+                  # Extensão
                   if t.name == 'ImageNotification'
                     bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                   end
@@ -162,15 +164,33 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          # 💊 Resolve vários "Flutter/Flutter.h not found" no CI
+          # 💊 costuma resolver "Flutter/Flutter.h not found" em CI
           rm -f ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
           pod install --verbose
           cd ..
 
-      # (Removido) Patch de sign_in_with_apple — não é necessário no iOS nesta versão
-      # e o arquivo não existe no caminho do plugin para iOS.
+      - name: Patch imports de Flutter nos plugins (Objective-C)
+        script: |
+          set -euo pipefail
+          # Troca '#import <Flutter/Flutter.h>' (ou com aspas) por '@import Flutter;'
+          # nos plugins Obj-C. Isso reduz dependência de header maps e usa o módulo.
+          count=0
+          patch_file() {
+            local F="$1"
+            if grep -qE '#import[[:space:]]*<Flutter/Flutter\.h>|#import[[:space:]]*"Flutter/Flutter\.h"' "$F"; then
+              sed -i '' -E 's/#import[[:space:]]*<Flutter\/Flutter\.h>/@import Flutter;/' "$F"
+              sed -i '' -E 's/#import[[:space:]]*"Flutter\/Flutter\.h"/@import Flutter;/' "$F"
+              echo "Patchei import em: $F"
+              count=$((count+1))
+            fi
+          }
+          # Plugins via symlink
+          while IFS= read -r -d '' F; do patch_file "$F"; done < <(find ios/.symlinks/plugins -type f -name '*.h' -print0 2>/dev/null || true)
+          # Fallback direto no cache do pub (ex.: wakelock_plus)
+          while IFS= read -r -d '' F; do patch_file "$F"; done < <(find "$HOME/.pub-cache" -type f -path "*ios*" -name '*.h' -print0 2>/dev/null || true)
+          echo "Arquivos patcheados: $count"
 
       - name: Importar certificado no keychain (sem interação)
         script: |
@@ -247,8 +267,8 @@ workflows:
         script: |
           set -euo pipefail
           if [ -f build_logs/flutter_build_verbose.log ]; then
-            echo "----- PRIMEIRO erro encontrado (com contexto) -----"
-            perl -0777 -ne 'if(/^(.*?)(^.*(?:error:|fatal error:).*$)/ms){print $2; exit 0}' build_logs/flutter_build_verbose.log || true
+            echo "----- PRIMEIRO erro encontrado -----"
+            perl -0777 -ne 'if(/(^.*(?:error:|fatal error:).*$)/m){print $1; exit 0}' build_logs/flutter_build_verbose.log || true
             echo "----- 200 linhas ao redor de erros -----"
             awk '
               /error:|fatal error:/ {for(i=NR-60;i<=NR+140;i++){if(i>0) print a[i%200];} print "----------------"; c=0}
