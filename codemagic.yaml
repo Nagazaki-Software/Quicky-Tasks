@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (frameworks estáticos + sem explicit modules)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos + Swift 5.0 + sem explicit modules)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,7 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Evita o erro "Swift pods as static libraries" sem exigir module maps antigos.
+          # Evita "Swift pods as static libraries" e funciona bem com Firebase/GoogleUtilities/etc.
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -91,45 +91,36 @@ workflows:
           end
 
           post_install do |installer|
-            # Desabilitar explicit modules em TODOS os targets (Pods + Runner)
-            (installer.pods_project.targets + installer.aggregate_targets.map(&:user_project).uniq.flat_map(&:targets)).uniq.each do |t|
-              t.build_configurations.each do |c|
-                bs = c.build_settings
-                bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-
-                # Use a versão de Swift do Xcode (não force aqui)
-                bs.delete('SWIFT_VERSION')
-
-                # 🔧 Desliga o modo "Explicit Module Builds" (Xcode 15/16)
-                bs['EXPLICIT_MODULES'] = 'NO'
-
-                # 🔧 Não trate warnings como erro (evita -Werror=non-modular-include-in-framework-module)
-                bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-
-                # 🔧 Tolerar includes não-modulares
-                bs['CLANG_ENABLE_MODULES'] = 'YES'
-                bs['DEFINES_MODULE'] = 'YES'
-                bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-
-                # Evitar interfaces evolutivas desnecessárias
-                bs.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
-
-                if t.name == 'ImageNotification'
-                  bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
-                end
-              end
-            end
-
-            # Garante que o Runner também receba as configs acima
-            installer.aggregate_targets.each do |agg|
-              agg.user_project.targets.each do |t|
+            # Aplica em TODOS os targets (Pods + Runner): Swift 5.0, sem explicit modules e tolerância a headers não-modulares
+            projects = [installer.pods_project]
+            installer.aggregate_targets.each { |agg| projects << agg.user_project }
+            projects.uniq.each do |proj|
+              proj.targets.each do |t|
                 t.build_configurations.each do |c|
                   bs = c.build_settings
+                  bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+
+                  # ✅ Define Swift 5.0 explicitamente (evita SWIFT_VERSION vazio)
+                  bs['SWIFT_VERSION'] = '5.0'
+
+                  # 🚫 Desliga Explicit Module Builds (Xcode 15/16 força erros em vários pods)
                   bs['EXPLICIT_MODULES'] = 'NO'
+
+                  # 🔧 Não trate warnings como erro (evita -Werror=non-modular-include-in-framework-module)
                   bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+
+                  # 🔧 Tolerar includes não-modulares em frameworks
+                  bs['CLANG_ENABLE_MODULES'] = 'YES'
+                  bs['DEFINES_MODULE'] = 'YES'
                   bs['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   bs['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+
+                  # Evita interfaces Swift evolutivas (desnecessário aqui)
+                  bs.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
+
+                  if t.name == 'ImageNotification'
+                    bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+                  end
                 end
               end
             end
@@ -244,7 +235,7 @@ workflows:
               c>0 {print; if(++c>120) c=0}
             ' build_logs/flutter_build_verbose.log | sed -n '1,600p' || true
             echo "----- Indicadores comuns -----"
-            grep -nE "non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface|explicit module" build_logs/flutter_build_verbose.log || true
+            grep -nE "SWIFT_VERSION|non-modular-include|modulemap|could not build Objective-C module|no such module|Undefined symbols for architecture|failed to verify module interface|explicit module" build_logs/flutter_build_verbose.log || true
           fi
 
       - name: Upload para App Store Connect (TestFlight)
