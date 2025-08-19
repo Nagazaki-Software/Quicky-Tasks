@@ -52,10 +52,10 @@ workflows:
           set -euo pipefail
           mkdir -p ios/Runner
           if [ ! -f ios/Runner/SwiftDummy.swift ]; then
-            /usr/bin/env bash -lc 'cat > ios/Runner/SwiftDummy.swift <<'"'"'SWIFT'"'"'
-          import Foundation
-          @objc class SwiftDummy: NSObject {}
-          SWIFT'
+            cat > ios/Runner/SwiftDummy.swift <<'SWIFT'
+            import Foundation
+            @objc class SwiftDummy: NSObject {}
+            SWIFT
             echo "Criado ios/Runner/SwiftDummy.swift"
           else
             echo "Já existe ios/Runner/SwiftDummy.swift"
@@ -94,12 +94,9 @@ workflows:
           require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
           flutter_ios_podfile_setup
 
-          # App principal (pods estáticos; sem use_frameworks!)
+          # App principal (pods estáticos; NÃO usar use_frameworks!)
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
-            # expõe cabeçalhos do Flutter para plugins ObjC/Swift
-            pod 'Flutter', :path => 'Flutter'
 
             # Braintree
             pod 'Braintree/Core',          '~> 6.36'
@@ -108,7 +105,7 @@ workflows:
             pod 'Braintree/DataCollector', '~> 6.36'
             pod 'Braintree/ApplePay',      '~> 6.36'
 
-            # 🔧 modular headers onde o validador Swift exige
+            # modular_headers só onde o validador Swift exige (Firebase & cia)
             pod 'SDWebImage',               :modular_headers => true
 
             pod 'FirebaseABTesting',        :modular_headers => true
@@ -134,7 +131,7 @@ workflows:
             pod 'FirebaseStorage',           :modular_headers => true
           end
 
-          # Extensão de notificação sem pods
+          # Extensão de notificação sem pods (independente)
           target 'ImageNotification' do
             inherit! :search_paths
           end
@@ -157,27 +154,33 @@ workflows:
                 bs['ENABLE_BITCODE'] = 'NO'
                 bs.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
 
-                # módulos Swift sim, mas sem library evolution global
+                # módulos Swift sim, mas SEM library evolution
                 bs['DEFINES_MODULE'] = 'YES'
-                # NÃO forçar BUILD_LIBRARY_FOR_DISTRIBUTION aqui (deixe NO por padrão)
+                # não setar BUILD_LIBRARY_FOR_DISTRIBUTION globalmente
 
-                # headers comuns
+                # headers/ldflags necessários
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public"')
                 append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/Headers/Public/Flutter"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/../Flutter/Flutter.xcframework/ios-arm64/Flutter.framework/Headers"')
-                append_unique(bs, 'HEADER_SEARCH_PATHS', '"${PODS_ROOT}/../Flutter/Flutter.xcframework/ios-arm64_x86_64-simulator/Flutter.framework/Headers"')
-
                 append_unique(bs, 'OTHER_LDFLAGS', '-ObjC')
+
+                # Workaround: plugin que quebra verificação de interface
+                if t.name == 'tap_google_pay_kit_flutter'
+                  bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
+                  bs['SWIFT_SERIALIZE_MODULE_INTERFACE'] = 'NO'
+                  append_unique(bs, 'OTHER_SWIFT_FLAGS', '-no-verify-emitted-module-interface')
+                end
 
                 if t.name == 'ImageNotification'
                   bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                 end
+              end
+            end
 
-                # 👇 Workaround específico: desliga .swiftinterface no plugin problemático
-                if t.name == 'tap_google_pay_kit_flutter'
-                  bs['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
-                  bs['SWIFT_SERIALIZE_MODULE_INTERFACE'] = 'NO'
-                end
+            # Ajustes no projeto do Runner (sem forçar library evolution)
+            installer.aggregate_targets.each do |agg|
+              agg.user_project.build_configurations.each do |config|
+                config.build_settings['SWIFT_VERSION'] = '5.0'
+                config.build_settings['DEFINES_MODULE'] = 'YES'
               end
             end
           end
