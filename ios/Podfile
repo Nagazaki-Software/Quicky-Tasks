@@ -1,8 +1,12 @@
 $FirebaseAnalyticsWithoutAdIdSupport = true
-# Uncomment this line to define a global platform for your project
+
+# Suba a base mínima. Braintree e amigos já miram 15+.
 platform :ios, '15.0'
 
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+# Silencia warnings de pods (não do seu app).
+inhibit_all_warnings!
+
+# CocoaPods analytics atrasa build do Flutter
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -29,43 +33,77 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  pod 'GoogleUtilities'
   use_frameworks! :linkage => :static
   use_modular_headers!
 
+  # Seus pods
+  pod 'GoogleUtilities'
+
+  # Instala pods do Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
+
+  # ⚠️ Recomendo usar o Firestore oficial para reduzir atrito com outras libs.
+  # Se você REALMENTE precisar do fork da Invertase, comente a linha oficial e descomente a alternativa.
+  pod 'FirebaseFirestore'
+  # pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
 end
 
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-        '$(inherited)',
-
-        # dart: PermissionGroup.camera
-        'PERMISSION_CAMERA=1',
-
-        # dart: PermissionGroup.photos
-        'PERMISSION_PHOTOS=1',
-
-         # dart: [PermissionGroup.location, PermissionGroup.locationAlways, PermissionGroup.locationWhenInUse]
-        'PERMISSION_LOCATION=1',
-
-        # dart: PermissionGroup.microphone
-        'PERMISSION_MICROPHONE=1',
-
-        # dart: PermissionGroup.notification
-        'PERMISSION_NOTIFICATIONS=1',
-      ]
-    end
-  end
-end
-
+# Target de extensão de notificação
 target 'ImageNotification' do
   use_frameworks! :linkage => :static
   pod 'Firebase/Messaging'
   pod 'GoogleUtilities'
+end
+
+post_install do |installer|
+  # Ajusta flags do projeto de Pods (onde vivem Braintree, Firebase, etc.)
+  installer.pods_project.targets.each do |t|
+    t.build_configurations.each do |config|
+      # Garante o target mínimo alinhado com o platform
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+
+      # Não tratar warning como erro nos pods
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+
+      # Silencia especificamente "deprecated declarations" em Obj-C dos pods
+      other_cflags = config.build_settings['OTHER_CFLAGS']
+      if other_cflags.nil? || other_cflags == ''
+        config.build_settings['OTHER_CFLAGS'] = ['$(inherited)', '-Wno-deprecated-declarations']
+      elsif other_cflags.is_a?(Array)
+        config.build_settings['OTHER_CFLAGS'] = other_cflags + ['-Wno-deprecated-declarations']
+      else
+        # String -> vira array herdado + flag
+        config.build_settings['OTHER_CFLAGS'] = ['$(inherited)', other_cflags, '-Wno-deprecated-declarations']
+      end
+    end
+  end
+
+  # Ajustes também no Runner (se quiser manter as suas defines)
+  installer.aggregate_targets.each do |aggregate|
+    aggregate.user_project.native_targets.each do |t|
+      t.build_configurations.each do |config|
+        # Suas defines de permissões (mantidas)
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+        wanted = %w[
+          PERMISSION_CAMERA=1
+          PERMISSION_PHOTOS=1
+          PERMISSION_LOCATION=1
+          PERMISSION_MICROPHONE=1
+          PERMISSION_NOTIFICATIONS=1
+        ]
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = (defs + wanted).uniq
+
+        # Garanta a mesma política de warnings no app
+        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      end
+    end
+  end
+
+  # Flutter helper padrão
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
 end
