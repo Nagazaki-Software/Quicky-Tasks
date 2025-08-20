@@ -44,7 +44,7 @@ workflows:
           printf 'import Foundation\n@objc class SwiftDummy: NSObject {}\n' > ios/Runner/SwiftDummy.swift
           echo "SwiftDummy.swift gravado"
 
-      - name: Escrever/Atualizar Podfile (modular headers + frameworks estáticos)
+      - name: Escrever/Atualizar Podfile (frameworks estáticos, modular headers, Swift 5)
         script: |
           set -euo pipefail
           mkdir -p ios
@@ -53,9 +53,7 @@ workflows:
           platform :ios, '15.0'
           ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-          # Necessário p/ Swift pods com deps que não definem módulos (Firebase, GoogleUtilities, SDWebImage, etc)
           use_modular_headers!
-          # Frameworks estáticos ajudam com Flutter/Xcode 15/16
           use_frameworks! :linkage => :static
 
           install! 'cocoapods',
@@ -80,7 +78,7 @@ workflows:
           target 'Runner' do
             flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-            # Braintree (remova se vier via plugin)
+            # Braintree (se já vier via plugin, remova estes)
             pod 'Braintree/Core',          '~> 6.36'
             pod 'Braintree/Card',          '~> 6.36'
             pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -111,7 +109,6 @@ workflows:
                   bs['USE_HEADERMAP'] = 'YES'
                   bs['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-                  # Headers do Flutter (várias localizações possíveis)
                   bs['HEADER_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)/Headers/Public',
@@ -126,7 +123,6 @@ workflows:
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release/Flutter.xcframework/ios-arm64/Headers'
                   ].join(' ')
 
-                  # Locais para o Flutter.framework
                   bs['FRAMEWORK_SEARCH_PATHS'] = [
                     '$(inherited)',
                     '$(PODS_ROOT)',
@@ -139,14 +135,6 @@ workflows:
                     '${FLUTTER_ROOT}/bin/cache/artifacts/engine/ios-release'
                   ].join(' ')
 
-                  # (Opcional) apontar modulemap do Flutter para o Swift
-                  existing = bs['OTHER_SWIFT_FLAGS'] || '$(inherited)'
-                  bs['OTHER_SWIFT_FLAGS'] = [
-                    existing,
-                    '-Xcc',
-                    '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/Flutter/Flutter.framework/Modules/module.modulemap'
-                  ].join(' ')
-
                   if t.name == 'ImageNotification'
                     bs['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
                   end
@@ -155,6 +143,7 @@ workflows:
             end
           end
           PODFILE
+
 
       - name: Patch xcconfigs do Flutter para herdar Pods
         script: |
@@ -178,11 +167,17 @@ workflows:
         script: |
           set -euo pipefail
           rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace ~/Library/Developer/Xcode/DerivedData/*
-          rm -f ios/Flutter/Flutter.podspec
+          # não apagar ios/Flutter/Flutter.podspec
           cd ios
           pod repo update
           pod install --repo-update --verbose
           cd ..
+          
+      - name: Verificar Flutter.h
+        script: |
+          set -euo pipefail
+          (ls ios/Pods/Flutter/Flutter.framework/Headers/Flutter.h || ls ios/Pods/Flutter/Flutter.xcframework/ios-arm64/Headers/Flutter.h)
+
 
       - name: Garantir modulemap do Flutter (se faltando)
         script: |
