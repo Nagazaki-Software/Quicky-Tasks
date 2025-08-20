@@ -1,73 +1,79 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.nagazakisoftware.quick" xmlns:tools="http://schemas.android.com/tools">
-  <!-- Permissões que você já tinha -->
-  <uses-permission android:name="android.permission.INTERNET"/>
-  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-  <uses-permission android:name="android.permission.CAMERA"/>
-  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
-  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-  <application
-    android:label="Quicky"
-    tools:replace="android:label"
-    android:icon="@mipmap/ic_launcher"
-    android:requestLegacyExternalStorage="true"
-  >
-    <!-- Sua MainActivity padrão do Flutter -->
-    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
-      <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
-      <meta-data android:name="io.flutter.embedding.android.SplashScreenDrawable" android:resource="@drawable/launch_background"/>
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN"/>
-        <category android:name="android.intent.category.LAUNCHER"/>
-      </intent-filter>
-      <!-- Deep linking que você já tinha -->
-      <meta-data android:name="flutter_deeplinking_enabled" android:value="true"/>
-      <intent-filter android:autoVerify="true">
-        <action android:name="android.intent.action.VIEW"/>
-        <category android:name="android.intent.category.DEFAULT"/>
-        <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="quicky" android:host="quicky.com"/>
-      </intent-filter>
-      <intent-filter>
-        <action android:name="es.antonborri.home_widget.action.LAUNCH" />
-      </intent-filter>
-    </activity>
-    <!-- ============================ -->
-    <!-- Braintree: Drop-in + 3DS2   -->
-    <!-- ============================ -->
-    <!-- Drop-in Activity com esquema de retorno.
-             IMPORTANTE: o scheme DEVE ser ${applicationId}.braintree (minúsculo).
-             Em tempo de build o ${applicationId} vira com.nagazakisoftware.quick -->
-    <activity android:name="com.braintreepayments.api.DropInActivity" android:exported="true" android:launchMode="singleTask">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW"/>
-        <category android:name="android.intent.category.DEFAULT"/>
-        <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="${applicationId}.braintree"/>
-      </intent-filter>
-    </activity>
-    <!-- 3D Secure 2 challenge screen -->
-    <activity android:name="com.braintreepayments.api.ThreeDSecureActivity" android:theme="@style/Theme.AppCompat.Light" android:exported="true"/>
-    <!-- (Opcional) Habilita Google Pay no SDK da Braintree -->
-    <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
-    <!-- ============================ -->
-    <!-- Usado pelo Flutter -->
-    <meta-data android:name="flutterEmbedding" android:value="2"/>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.nagazakisoftware.quick"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <receiver android:name=".QuickyWidgetProvider" android:exported="true">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data android:name="android.appwidget.provider" android:resource="@xml/quicky_widget_provider" />
-    </receiver>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <application
+        android:label="Quicky"
+        tools:replace="android:label"
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
 
-    <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="true">
-      <intent-filter>
-        <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
-      </intent-filter>
-    </receiver>
-    <service android:name="es.antonborri.home_widget.HomeWidgetBackgroundService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true"/>
-  </application>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <!-- Displays an Android View that continues showing the launch screen
+                 Drawable until Flutter paints its first frame, then this splash
+                 screen fades out. A splash screen is useful to avoid any visual
+                 gap between the end of Android's launch screen and the painting of
+                 Flutter's first frame. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.SplashScreenDrawable"
+              android:resource="@drawable/launch_background"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Deep linking -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="true" />
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="quicky" android:host="quicky.com" />
+            </intent-filter>
+
+        </activity>
+        <activity android:name="com.braintreepayments.api.BraintreeBrowserSwitchActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${applicationId}.braintree" />
+            </intent-filter>
+        </activity>
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyCFBfcNHFg97sM7EhKnAP4OHIoY3Q8Y_xQ"/>
+
+        <meta-data android:name="com.google.android.gms.wallet.api.enabled" android:value="true"/>
+
+    </application>
 </manifest>

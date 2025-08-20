@@ -2,12 +2,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // Repositório do Flutter artifacts (alguns plugins precisam)
-        maven { url "https://storage.googleapis.com/download.flutter.io" }
-        // Repositório do Cardinal Commerce (necessário para 3DS da Braintree)
-        maven { url "https://cardinalcommerceprod.jfrog.io/artifactory/android" }
-        // Opcional: caso use libs do JitPack
-        maven { url "https://jitpack.io" }
     }
 }
 
@@ -34,23 +28,21 @@ subprojects {
             }
         }
         if (project.hasProperty('android')) {
-            project.android {
-                if (namespace == null) {
-                    namespace project.group
+                project.android {
+                    if (namespace == null) {
+                        namespace project.group
+                    }
                 }
             }
-        }
     }
 }
-
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
-
 subprojects {
     project.evaluationDependsOn(':app')
 }
 
-tasks.register("clean", Delete) {
-    delete rootProject.layout.buildDirectory
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }

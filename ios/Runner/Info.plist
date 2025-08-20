@@ -1,132 +1,107 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-  <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Quicky</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Quicky</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
 
-    <key>CFBundleDisplayName</key>
-    <string>Quicky</string>
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIdentifier</key>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Quicky</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$(FLUTTER_BUILD_NAME)</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.1075126726259-jp9qtdmdp1oc3hjluiu7ek1lgq92nvj4</string>
+                
+            </array>
+        </dict>
 
-    <!-- URL schemes -->
-    <key>CFBundleURLTypes</key>
-    <array>
-      <!-- Firebase/Auth -->
-      <dict>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-          <string>com.googleusercontent.apps.1075126726259-jp9qtdmdp1oc3hjluiu7ek1lgq92nvj4</string>
-        </array>
-      </dict>
-      <!-- Deep link quicky:// -->
-      <dict>
+
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>com.nagazakisoftware.quick.braintree</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.nagazakisoftware.quick.braintree</string>
+            </array>
+        </dict>
+
+        <dict>
         <key>CFBundleTypeRole</key>
         <string>Editor</string>
         <key>CFBundleURLName</key>
         <string>quicky.com</string>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>quicky</string>
+        <string>quicky</string>
         </array>
-      </dict>
-      <!-- Braintree retorno app-switch -->
-      <dict>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleURLName</key>
-        <string>com.nagazakisoftware.quick.payments</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-          <string>com.nagazakisoftware.quick.payments</string>
-        </array>
-      </dict>
+        </dict>
     </array>
-
-    <!-- Permite app-switch Venmo/PayPal -->
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-      <string>venmo</string>
-      <string>com.venmo.touch.v2</string>
-      <string>paypal</string>
-      <string>com.paypal.ppclient.touch.v2</string>
-      <string>com.paypal.ppclient.touch.v1</string>
-      <string>com.paypal.ppclient.touch</string>
-      <string>com.paypal.paypalaccounts</string>
-    </array>
-
     <key>FlutterDeepLinkingEnabled</key>
     <true/>
 
-    <key>CFBundleVersion</key>
-    <string>$(FLUTTER_BUILD_NUMBER)</string>
 
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 
-    <!-- Mensagens de permissão (apenas chaves válidas no iOS) -->
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>We use location to surface tasks based on users' campuses.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>We use the user's camera so that they can send photos of completed tasks or create one.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>We use audio when the user needs to send a voice message.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>We use the user's photo library so that they can send photos of completed tasks or create one.</string>
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>We add photos to your library when you save images from the app.</string>
-
-    <!-- Background/push -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+    <string>We use location to surface tasks based on users&#39; campuses.</string>
+	<key>NSCameraUsageDescription</key>
+    <string>We use the user&#39;s camera so that they can send photos of completed tasks or create one.</string>
+	<key>NSMicrophoneUsageDescription</key>
+    <string>We use audiowhen the user needs to send a voice message.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+    <string>We use the user&#39;s photo library so that they can send photos of completed tasks or create one.</string>
+	<key>PermissionGroupNotification</key>
+    <string>We use notification for communication from tasker to taskee and vice versa.</string>
     <key>UIBackgroundModes</key>
     <array>
-      <string>fetch</string>
-      <string>remote-notification</string>
+        <string>fetch</string>
+        <string>remote-notification</string>
     </array>
 
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
 
-    <!-- Flutter não usa storyboard principal; remover evita warnings -->
-    <!-- <key>UIMainStoryboardFile</key> -->
 
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-      <string>UIInterfaceOrientationPortrait</string>
-      <string>UIInterfaceOrientationLandscapeLeft</string>
-      <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-      <string>UIInterfaceOrientationPortrait</string>
-      <string>UIInterfaceOrientationPortraitUpsideDown</string>
-      <string>UIInterfaceOrientationLandscapeLeft</string>
-      <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 
-    <key>UIViewControllerBasedStatusBarAppearance</key>
-    <false/>
-
-    <!-- Evita questionário de criptografia em submissão (ajuste se usar criptografia não isenta) -->
-    <key>ITSAppUsesNonExemptEncryption</key>
-    <false/>
-
-    <!-- Recomendado em iPadOS para ponteiro/teclados, opcional -->
-    <key>UIApplicationSupportsIndirectInputEvents</key>
-    <true/>
-  </dict>
+</dict>
 </plist>

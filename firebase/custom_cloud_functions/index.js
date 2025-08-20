@@ -8,6 +8,3 @@ exports.createPaymentIntent = createPaymentIntent.createPaymentIntent;
 const createAccountStripeCustom = require("./create_account_stripe_custom.js");
 exports.createAccountStripeCustom =
   createAccountStripeCustom.createAccountStripeCustom;
-const braintreePayment = require("./braintree.js");
-exports.braintreePayment = braintreePayment.braintreePayment;
-

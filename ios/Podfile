@@ -1,15 +1,9 @@
-source 'https://cdn.cocoapods.org/'
-platform :ios, '15.0'
+$FirebaseAnalyticsWithoutAdIdSupport = true
+# Uncomment this line to define a global platform for your project
+platform :ios, '14.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-
-# ✅ Vale para TODOS os targets (Runner + extensões)
-use_modular_headers!
-use_frameworks! :linkage => :static
-
-install! 'cocoapods',
-  :warn_for_unused_master_specs_repo => false,
-  :generate_multiple_pod_projects => false,
-  :integrate_targets => true
 
 project 'Runner', {
   'Debug' => :debug,
@@ -18,43 +12,60 @@ project 'Runner', {
 }
 
 def flutter_root
-  generated_xcconfig = File.expand_path(File.join('..','Flutter','Generated.xcconfig'), __FILE__)
-  raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
-  File.foreach(generated_xcconfig) do |line|
-    m = line.match(/FLUTTER_ROOT\=(.*)/); return m[1].strip if m
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
-  raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
 end
 
-require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
 flutter_ios_podfile_setup
 
 target 'Runner' do
+  pod 'GoogleUtilities'
+  use_frameworks! :linkage => :static
+  use_modular_headers!
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-
-  # ⚠️ Evite declarar Braintree manualmente se o plugin já traz.
-  # Se precisar mesmo travar versão, deixe aqui, mas cuidado com duplicação.
-  # pod 'Braintree/Core',          '~> 6.36'
-  # pod 'Braintree/Card',          '~> 6.36'
-  # pod 'Braintree/ThreeDSecure',  '~> 6.36'
-  # pod 'Braintree/DataCollector', '~> 6.36'
-  # pod 'Braintree/ApplePay',      '~> 6.36'
-end
-
-target 'ImageNotification' do
-  inherit! :search_paths
+  pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '11.13.0'
 end
 
 post_install do |installer|
-  # ✅ Chame o helper do Flutter com o INSTALLER (uma vez só)
-  flutter_additional_ios_build_settings(installer)
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
 
-  # Ajustes extras (opcional)
-  installer.pods_project.targets.each do |t|
-    t.build_configurations.each do |c|
-      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      c.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-      c.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        # dart: PermissionGroup.camera
+        'PERMISSION_CAMERA=1',
+
+        # dart: PermissionGroup.photos
+        'PERMISSION_PHOTOS=1',
+
+         # dart: [PermissionGroup.location, PermissionGroup.locationAlways, PermissionGroup.locationWhenInUse]
+        'PERMISSION_LOCATION=1',
+
+        # dart: PermissionGroup.microphone
+        'PERMISSION_MICROPHONE=1',
+
+        # dart: PermissionGroup.notification
+        'PERMISSION_NOTIFICATIONS=1',
+      ]
     end
   end
+end
+
+target 'ImageNotification' do
+  use_frameworks! :linkage => :static
+  pod 'Firebase/Messaging'
+  pod 'GoogleUtilities'
 end
