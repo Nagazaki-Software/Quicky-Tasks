@@ -2,13 +2,14 @@ source 'https://cdn.cocoapods.org/'
 platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# ✅ Aplica a TODOS os targets (Runner + extensões)
+use_modular_headers!
+use_frameworks! :linkage => :static
+
 install! 'cocoapods',
   :warn_for_unused_master_specs_repo => false,
   :generate_multiple_pod_projects => false,
   :integrate_targets => true
-
-# ✅ Gera module maps para dependências que não os definem por padrão
-use_modular_headers!
 
 project 'Runner', {
   'Debug' => :debug,
@@ -30,60 +31,35 @@ require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'b
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Mantém estático (melhor p/ Flutter). Se ainda falhar, podemos trocar para dinâmico.
-  use_frameworks! :linkage => :static
-
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # ---- TUAS DEPENDÊNCIAS MANUAIS ----
-  pod 'Braintree/Core',          '~> 6.36'
-  pod 'Braintree/Card',          '~> 6.36'
-  pod 'Braintree/ThreeDSecure',  '~> 6.36'
-  pod 'Braintree/DataCollector', '~> 6.36'
-  pod 'Braintree/ApplePay',      '~> 6.36'
-
-  # ---- FORÇANDO MODULAR HEADERS NAS PROBLEMÁTICAS (do log) ----
-  # DKPhotoGallery reclama do SDWebImage
-  pod 'DKPhotoGallery',         :modular_headers => true
-  pod 'SDWebImage',             :modular_headers => true
-
-  # Firebase e utilitários citados pelo validador
-  pod 'FirebaseABTesting',      :modular_headers => true
-  pod 'FirebaseCore',           :modular_headers => true
-  pod 'FirebaseCoreExtension',  :modular_headers => true
-  pod 'FirebaseCoreInternal',   :modular_headers => true
-  pod 'FirebaseInstallations',  :modular_headers => true
-  pod 'FirebaseAuth',           :modular_headers => true
-  pod 'FirebaseFirestore',      :modular_headers => true
-  pod 'FirebaseFunctions',      :modular_headers => true
-  pod 'FirebaseRemoteConfig',   :modular_headers => true
-  pod 'FirebaseSessions',       :modular_headers => true
-  pod 'FirebaseStorage',        :modular_headers => true
-
-  # Interops citados
-  pod 'FirebaseAuthInterop',        :modular_headers => true
-  pod 'FirebaseAppCheckInterop',    :modular_headers => true
-  pod 'FirebaseMessagingInterop',   :modular_headers => true
-  pod 'RecaptchaInterop',           :modular_headers => true
-
-  # Google utils/transport + nanopb
-  pod 'GoogleUtilities',        :modular_headers => true
-  pod 'GoogleDataTransport',    :modular_headers => true
-  pod 'nanopb',                 :modular_headers => true
+  # ⚠️ Evite declarar Braintree manualmente se o plugin Flutter já traz.
+  # Se precisar MUITO fixar versão, deixe só UM lugar declarando para não duplicar:
+  # pod 'Braintree/Core',          '~> 6.36'
+  # pod 'Braintree/Card',          '~> 6.36'
+  # pod 'Braintree/ThreeDSecure',  '~> 6.36'
+  # pod 'Braintree/DataCollector', '~> 6.36'
+  # pod 'Braintree/ApplePay',      '~> 6.36'
 end
 
-# Extensão de notificação (se existir)
+# Extensão de notificação
 target 'ImageNotification' do
   inherit! :search_paths
+  # Nada de especial aqui; o use_frameworks! já veio do global
 end
+
+# (Opcional) Se você tem um Widget Extension, adicione:
+# target 'Quicky-Widget' do
+#   inherit! :search_paths
+# end
 
 post_install do |installer|
   installer.pods_project.targets.each do |t|
-    flutter_additional_ios_build_settings(t)
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      c.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-      c.build_settings.delete('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES')
+      c.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      c.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
     end
   end
+  flutter_additional_ios_build_settings(installer)
 end
