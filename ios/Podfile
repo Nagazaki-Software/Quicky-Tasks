@@ -2,7 +2,7 @@ source 'https://cdn.cocoapods.org/'
 platform :ios, '15.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# ✅ Aplica a TODOS os targets (Runner + extensões)
+# ✅ Vale para TODOS os targets (Runner + extensões)
 use_modular_headers!
 use_frameworks! :linkage => :static
 
@@ -18,11 +18,10 @@ project 'Runner', {
 }
 
 def flutter_root
-  generated_xcconfig = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  generated_xcconfig = File.expand_path(File.join('..','Flutter','Generated.xcconfig'), __FILE__)
   raise "Generated.xcconfig não encontrado. Rode `flutter pub get`." unless File.exist?(generated_xcconfig)
   File.foreach(generated_xcconfig) do |line|
-    m = line.match(/FLUTTER_ROOT\=(.*)/)
-    return m[1].strip if m
+    m = line.match(/FLUTTER_ROOT\=(.*)/); return m[1].strip if m
   end
   raise "FLUTTER_ROOT não encontrado no Generated.xcconfig."
 end
@@ -33,8 +32,8 @@ flutter_ios_podfile_setup
 target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # ⚠️ Evite declarar Braintree manualmente se o plugin Flutter já traz.
-  # Se precisar MUITO fixar versão, deixe só UM lugar declarando para não duplicar:
+  # ⚠️ Evite declarar Braintree manualmente se o plugin já traz.
+  # Se precisar mesmo travar versão, deixe aqui, mas cuidado com duplicação.
   # pod 'Braintree/Core',          '~> 6.36'
   # pod 'Braintree/Card',          '~> 6.36'
   # pod 'Braintree/ThreeDSecure',  '~> 6.36'
@@ -42,18 +41,15 @@ target 'Runner' do
   # pod 'Braintree/ApplePay',      '~> 6.36'
 end
 
-# Extensão de notificação
 target 'ImageNotification' do
   inherit! :search_paths
-  # Nada de especial aqui; o use_frameworks! já veio do global
 end
 
-# (Opcional) Se você tem um Widget Extension, adicione:
-# target 'Quicky-Widget' do
-#   inherit! :search_paths
-# end
-
 post_install do |installer|
+  # ✅ Chame o helper do Flutter com o INSTALLER (uma vez só)
+  flutter_additional_ios_build_settings(installer)
+
+  # Ajustes extras (opcional)
   installer.pods_project.targets.each do |t|
     t.build_configurations.each do |c|
       c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
@@ -61,5 +57,4 @@ post_install do |installer|
       c.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
     end
   end
-  flutter_additional_ios_build_settings(installer)
 end
